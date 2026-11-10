@@ -1,7 +1,8 @@
 import os
 import uuid
 import logging
-from typing import Optional
+from typing import Optional, List
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException, Request
@@ -199,6 +200,14 @@ class YouTubeUploadRequest(BaseModel):
     privacy_status: str = Field(default="public", description="'public', 'unlisted', or 'private'")
     custom_title: Optional[str] = None
     custom_description: Optional[str] = None
+    publish_at: Optional[str] = None
+
+class BatchYouTubeUploadRequest(BaseModel):
+    clip_ids: List[str]
+    interval_minutes: int = Field(default=30, ge=1, le=1440)
+    start_now: bool = Field(default=True)
+    custom_start_time: Optional[str] = None
+    privacy_status: str = Field(default="public")
 
 @app.get("/api/dashboard/analytics")
 def get_dashboard_analytics_endpoint():
@@ -237,7 +246,8 @@ def upload_clip_to_youtube_endpoint(clip_id: str, req: YouTubeUploadRequest = Yo
         video_id=clip["video_id"],
         title=title,
         description=description,
-        privacy_status=req.privacy_status
+        privacy_status=req.privacy_status,
+        scheduled_publish_at=req.publish_at or ""
     )
 
     try:
@@ -248,7 +258,8 @@ def upload_clip_to_youtube_endpoint(clip_id: str, req: YouTubeUploadRequest = Yo
             title=title,
             description=description,
             tags=tags,
-            privacy_status=req.privacy_status
+            privacy_status=req.privacy_status,
+            publish_at=req.publish_at
         )
 
         update_youtube_upload_status(
@@ -272,6 +283,119 @@ def upload_clip_to_youtube_endpoint(clip_id: str, req: YouTubeUploadRequest = Yo
             error_message=str(e)
         )
         raise HTTPException(status_code=500, detail=f"YouTube upload failed: {str(e)}")
+
+@app.post("/api/youtube/batch-upload")
+def batch_upload_clips_to_youtube_endpoint(req: BatchYouTubeUploadRequest):
+    """
+    Batch uploads and schedules multiple Shorts to go public at staggered intervals.
+    E.g., Every 20 or 30 minutes!
+    If a selected clip is not yet rendered, automatically renders it first.
+    """
+    if not req.clip_ids:
+        raise HTTPException(status_code=400, detail="No clip IDs provided for batch upload.")
+
+    uploader = get_youtube_uploader()
+    now_utc = datetime.now(timezone.utc)
+    base_time = now_utc
+
+    if req.custom_start_time:
+        try:
+            # Parse ISO string
+            base_time = datetime.fromisoformat(req.custom_start_time.replace("Z", "+00:00"))
+        except Exception:
+            logger.warning("Could not parse custom_start_time, defaulting to now_utc.")
+            base_time = now_utc
+
+    results = []
+    errors = []
+
+    for idx, clip_id in enumerate(req.clip_ids):
+        clip = get_clip(clip_id)
+        if not clip:
+            errors.append({"clip_id": clip_id, "error": "Clip not found"})
+            continue
+
+        # Auto-render if not already rendered
+        if not clip.get("output_path") or not os.path.exists(clip["output_path"]):
+            try:
+                logger.info(f"Clip {clip_id} not yet rendered. Auto-rendering before batch upload...")
+                clip = render_clip_pipeline(clip_id=clip_id)
+            except Exception as r_err:
+                logger.error(f"Auto-rendering failed for {clip_id}: {r_err}")
+                errors.append({"clip_id": clip_id, "error": f"Auto-rendering failed: {str(r_err)}"})
+                continue
+
+        # Calculate staggered schedule timestamp
+        publish_at_str = None
+        if req.start_now and idx == 0:
+            # First clip goes public immediately
+            publish_at_str = None
+            clip_privacy = req.privacy_status
+        else:
+            # Subsequent clips scheduled at intervals: idx * interval_minutes (or (idx + 1) if not start_now)
+            offset_multiplier = idx if req.start_now else (idx + 1)
+            scheduled_time = base_time + timedelta(minutes=req.interval_minutes * offset_multiplier)
+            # YouTube API requires RFC 3339 formatted UTC timestamp: e.g. 2026-11-10T18:00:00Z
+            publish_at_str = scheduled_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+            clip_privacy = "private"  # YouTube requires private for scheduled videos
+
+        title = clip.get("title") or "Mindset & Habit Trick #Shorts"
+        description = clip.get("description") or f"{title}\n\n#Shorts #PDX"
+        tags = [t.strip("#") for t in (clip.get("hashtags") or "").split() if t]
+        upload_id = str(uuid.uuid4())
+
+        record_youtube_upload(
+            upload_id=upload_id,
+            clip_id=clip_id,
+            video_id=clip["video_id"],
+            title=title,
+            description=description,
+            privacy_status=clip_privacy,
+            scheduled_publish_at=publish_at_str or ""
+        )
+
+        try:
+            res = uploader.upload_short(
+                video_path=clip["output_path"],
+                title=title,
+                description=description,
+                tags=tags,
+                privacy_status=clip_privacy,
+                publish_at=publish_at_str
+            )
+            update_youtube_upload_status(
+                upload_id=upload_id,
+                status="published",
+                youtube_video_id=res["youtube_video_id"],
+                youtube_url=res["youtube_url"]
+            )
+            results.append({
+                "clip_id": clip_id,
+                "title": title,
+                "upload_id": upload_id,
+                "youtube_video_id": res["youtube_video_id"],
+                "youtube_url": res["youtube_url"],
+                "scheduled_publish_at": publish_at_str,
+                "status": "scheduled" if publish_at_str else "published"
+            })
+        except Exception as up_err:
+            logger.error(f"Upload failed for clip {clip_id}: {up_err}")
+            update_youtube_upload_status(
+                upload_id=upload_id,
+                status="failed",
+                error_message=str(up_err)
+            )
+            errors.append({"clip_id": clip_id, "error": str(up_err)})
+
+    return {
+        "success": len(results) > 0,
+        "total_requested": len(req.clip_ids),
+        "scheduled_count": len(results),
+        "error_count": len(errors),
+        "interval_minutes": req.interval_minutes,
+        "results": results,
+        "errors": errors
+    }
 
 @app.get("/api/youtube/uploads")
 def list_youtube_uploads_endpoint():

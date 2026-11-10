@@ -109,12 +109,18 @@ def init_db():
                 upload_status TEXT DEFAULT 'pending',
                 youtube_url TEXT DEFAULT '',
                 error_message TEXT DEFAULT '',
+                scheduled_publish_at TEXT DEFAULT '',
                 uploaded_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (clip_id) REFERENCES clips (id) ON DELETE CASCADE,
                 FOREIGN KEY (video_id) REFERENCES videos (id) ON DELETE CASCADE
             )
         """)
+
+        cursor.execute("PRAGMA table_info(youtube_uploads)")
+        yt_columns = [row[1] for row in cursor.fetchall()]
+        if "scheduled_publish_at" not in yt_columns:
+            cursor.execute("ALTER TABLE youtube_uploads ADD COLUMN scheduled_publish_at TEXT DEFAULT ''")
         
         conn.commit()
 
@@ -324,15 +330,16 @@ def record_youtube_upload(
     video_id: str,
     title: str,
     description: str,
-    privacy_status: str = "public"
+    privacy_status: str = "public",
+    scheduled_publish_at: str = ""
 ) -> Dict[str, Any]:
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO youtube_uploads (
-                id, clip_id, video_id, title, description, privacy_status, upload_status, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
-        """, (upload_id, clip_id, video_id, title, description, privacy_status))
+                id, clip_id, video_id, title, description, privacy_status, upload_status, scheduled_publish_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP)
+        """, (upload_id, clip_id, video_id, title, description, privacy_status, scheduled_publish_at))
         conn.commit()
     return get_youtube_upload(upload_id)
 

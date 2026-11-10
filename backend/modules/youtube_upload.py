@@ -49,12 +49,13 @@ class YouTubeUploader:
         title: str,
         description: str,
         tags: Optional[list] = None,
-        privacy_status: str = "public"
+        privacy_status: str = "public",
+        publish_at: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Uploads a video to YouTube Shorts using YouTube Data API v3.
-        If credentials are not yet configured, runs in high-fidelity simulation mode
-        for immediate local testing and dashboard operation.
+        Supports native scheduled release via publish_at (ISO 8601 UTC string).
+        If credentials are not yet configured, runs in verified simulation mode.
         """
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Video file to upload does not exist: {video_path}")
@@ -73,17 +74,26 @@ class YouTubeUploader:
                 credentials = Credentials.from_authorized_user_info(token_data, SCOPES)
                 youtube = build("youtube", "v3", credentials=credentials)
 
+                status_config = {
+                    "selfDeclaredMadeForKids": False
+                }
+
+                if publish_at:
+                    # YouTube requirement: scheduled videos MUST have privacyStatus set to 'private'
+                    status_config["privacyStatus"] = "private"
+                    status_config["publishAt"] = publish_at
+                    logger.info(f"Video scheduled to go public at: {publish_at}")
+                else:
+                    status_config["privacyStatus"] = privacy_status
+
                 body = {
                     "snippet": {
                         "title": title[:100],
                         "description": description,
-                        "tags": tags or ["Shorts", "ViralCutAI"],
+                        "tags": tags or ["Shorts", "PDX", "ViralCutAI"],
                         "categoryId": "22"  # People & Blogs / Entertainment
                     },
-                    "status": {
-                        "privacyStatus": privacy_status,
-                        "selfDeclaredMadeForKids": False
-                    }
+                    "status": status_config
                 }
 
                 media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
@@ -95,7 +105,9 @@ class YouTubeUploader:
                     "success": True,
                     "mode": "live",
                     "youtube_video_id": video_id,
-                    "youtube_url": f"https://www.youtube.com/shorts/{video_id}"
+                    "youtube_url": f"https://www.youtube.com/shorts/{video_id}",
+                    "scheduled_publish_at": publish_at,
+                    "privacy_status": status_config.get("privacyStatus")
                 }
             except Exception as e:
                 logger.error(f"Live YouTube upload failed: {e}")
@@ -110,6 +122,8 @@ class YouTubeUploader:
                 "mode": "simulation",
                 "youtube_video_id": simulated_id,
                 "youtube_url": f"https://www.youtube.com/shorts/{simulated_id}",
+                "scheduled_publish_at": publish_at,
+                "privacy_status": "private" if publish_at else privacy_status,
                 "note": "Uploaded in local simulation mode. Add client_secrets.json to enable live channel sync."
             }
 
