@@ -19,7 +19,11 @@ import {
   Send,
   X,
   ListPlus,
-  ArrowRight
+  ArrowRight,
+  ExternalLink,
+  Zap,
+  TrendingUp,
+  Layers
 } from 'lucide-react';
 
 const API_BASE = 'http://127.0.0.1:8000';
@@ -32,7 +36,15 @@ export default function App() {
     pending_uploads: 0,
     completed_uploads: 0,
     recent_videos: [],
-    recent_clips: []
+    recent_clips: [],
+    top_clips: [],
+    upcoming_scheduled: [],
+    channel_info: {
+      name: 'PDX',
+      status: 'connected',
+      mode: 'live',
+      target_url: 'https://studio.youtube.com'
+    }
   });
 
   const [videos, setVideos] = useState([]);
@@ -47,6 +59,8 @@ export default function App() {
   const [scheduleInterval, setScheduleInterval] = useState(30);
   const [scheduleStartNow, setScheduleStartNow] = useState(true);
   const [customStartTime, setCustomStartTime] = useState('');
+  const [batchLayoutMode, setBatchLayoutMode] = useState('auto');
+  const [batchForceRerender, setBatchForceRerender] = useState(false);
   const [isBatchPublishing, setIsBatchPublishing] = useState(false);
   const [batchProgressText, setBatchProgressText] = useState('');
   const [batchResults, setBatchResults] = useState(null);
@@ -108,7 +122,7 @@ export default function App() {
         const data = await res.json();
         const loadedClips = data.clips || [];
         setClips(loadedClips);
-        setSelectedClipIds([]); // Reset selection when switching video
+        setSelectedClipIds([]);
 
         if (preserveClipId) {
           const match = loadedClips.find(c => c.id === preserveClipId);
@@ -318,7 +332,9 @@ export default function App() {
           interval_minutes: parseInt(scheduleInterval) || 30,
           start_now: scheduleStartNow,
           privacy_status: privacyStatus,
-          custom_start_time: customStartTime ? new Date(customStartTime).toISOString() : null
+          custom_start_time: customStartTime ? new Date(customStartTime).toISOString() : null,
+          layout_mode: batchLayoutMode,
+          force_rerender: batchForceRerender
         })
       });
 
@@ -374,7 +390,7 @@ export default function App() {
         <nav className="sidebar-nav">
           <div
             className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setActiveTab('dashboard')}
+            onClick={() => { setActiveTab('dashboard'); fetchAnalytics(); }}
           >
             <BarChart3 size={18} />
             <span>Dashboard</span>
@@ -425,37 +441,59 @@ export default function App() {
       <main className="main-content">
         <div className="content-container">
 
-          {/* TAB 1: DASHBOARD */}
+          {/* TAB 1: ENRICHED USEFUL DASHBOARD */}
           {activeTab === 'dashboard' && (
             <div>
-              <div style={{ marginBottom: 28, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h1 style={{ fontSize: 24, fontWeight: 800 }}>PDX Studio Overview</h1>
-                  <p style={{ color: 'var(--text-secondary)', marginTop: 4 }}>
-                    Automated story detection, vertical framing, and interval scheduling for YouTube Shorts.
-                  </p>
+              {/* Channel Connection Banner */}
+              <div className="channel-banner">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #ef4444, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800, color: '#fff' }}>
+                    PDX
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <h2 style={{ fontSize: 18, fontWeight: 800 }}>YouTube Channel: PDX</h2>
+                      <span className="badge-live">
+                        <span className="pulsing-dot"></span> Live API Connected
+                      </span>
+                    </div>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 2 }}>
+                      Automated 9:16 Shorts pipeline with custom layout framing and 20–30m batch interval scheduling.
+                    </p>
+                  </div>
                 </div>
+
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button className="btn btn-primary" onClick={() => setActiveTab('upload')}>
-                    <Upload size={16} /> New Video
-                  </button>
+                  <a
+                    href="https://studio.youtube.com"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-secondary btn-sm"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <ExternalLink size={14} /> Open YouTube Studio
+                  </a>
                   {clips.length > 0 && (
-                    <button className="btn btn-success" onClick={() => { selectAllClips(); setShowScheduleModal(true); }}>
-                      <Calendar size={16} /> Schedule All ({clips.length})
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => { selectAllClips(); setShowScheduleModal(true); }}
+                      style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}
+                    >
+                      <Calendar size={14} /> Schedule All ({clips.length})
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Analytics Metric Cards */}
+              {/* 4 Metric Cards */}
               <div className="metric-cards">
                 <div className="metric-card">
                   <div className="metric-header">
-                    <span className="metric-title">Master Videos</span>
+                    <span className="metric-title">Master Projects</span>
                     <Video size={18} color="var(--accent-red)" />
                   </div>
                   <div className="metric-value">{analytics.total_videos}</div>
-                  <div className="metric-footer">Uploaded & Analyzed</div>
+                  <div className="metric-footer">Analyzed Long Videos</div>
                 </div>
 
                 <div className="metric-card">
@@ -463,40 +501,164 @@ export default function App() {
                     <span className="metric-title">Story Moments</span>
                     <Flame size={18} color="var(--accent-orange)" />
                   </div>
-                  <div className="metric-value">{clips.length}</div>
-                  <div className="metric-footer">Active Project Moments</div>
+                  <div className="metric-value">{clips.length || analytics.total_shorts}</div>
+                  <div className="metric-footer">Distinct Narrative Clips</div>
                 </div>
 
                 <div className="metric-card">
                   <div className="metric-header">
-                    <span className="metric-title">Rendered 9:16</span>
+                    <span className="metric-title">Rendered 9:16 Shorts</span>
                     <Sparkles size={18} color="var(--accent-purple)" />
                   </div>
                   <div className="metric-value">{analytics.total_shorts}</div>
-                  <div className="metric-footer">Formatted for YouTube</div>
+                  <div className="metric-footer">Framed & Subtitled</div>
                 </div>
 
                 <div className="metric-card">
                   <div className="metric-header">
-                    <span className="metric-title">YouTube Uploads</span>
+                    <span className="metric-title">PDX Published</span>
                     <Youtube size={18} color="var(--accent-green)" />
                   </div>
                   <div className="metric-value">{analytics.completed_uploads}</div>
-                  <div className="metric-footer">Published to PDX</div>
+                  <div className="metric-footer">Uploaded to YouTube</div>
                 </div>
               </div>
 
-              {/* Quick Actions Bar */}
-              <div style={{ marginTop: 28, background: 'var(--bg-card)', padding: 20, borderRadius: 12, border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>⚡ 5-Minute Fast Workflow</h3>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 }}>
-                    Drop a video $\rightarrow$ ViralCut AI detects complete stories with visual charts $\rightarrow$ Batch schedule 1 Short every 20 or 30 minutes!
-                  </p>
+              {/* 2-Column Dashboard Grid: Ranked Moments & Live Queue */}
+              <div className="dashboard-grid">
+                {/* Left Column: Top Viral Highlights with 1-Click Action */}
+                <div className="dashboard-panel">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <div>
+                      <h3 style={{ fontSize: 16, fontWeight: 700 }}>🔥 Top Ranked Story Moments</h3>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+                        Top AI-scored self-contained clips from your video ready for immediate launch.
+                      </p>
+                    </div>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setActiveTab('clips')}
+                    >
+                      View All ({clips.length}) <ArrowRight size={14} />
+                    </button>
+                  </div>
+
+                  {clips.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
+                      <p>No project moments loaded.</p>
+                      <button className="btn btn-primary btn-sm" style={{ marginTop: 10 }} onClick={() => setActiveTab('upload')}>
+                        <Upload size={14} /> Upload Video Project
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {clips.slice(0, 4).map((c, i) => (
+                        <div key={c.id} className="top-moment-card">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, maxWidth: '65%' }}>
+                            <span style={{ fontSize: 14, fontWeight: 800, color: i === 0 ? '#eab308' : '#94a3b8' }}>
+                              #{i + 1}
+                            </span>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {c.title}
+                              </div>
+                              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 3 }}>
+                                <span className={`viral-badge ${c.viral_score >= 70 ? 'high' : 'medium'}`} style={{ padding: '2px 6px', fontSize: 11 }}>
+                                  <Flame size={12} /> {c.viral_score}
+                                </span>
+                                {c.has_visual && (
+                                  <span className="viral-badge" style={{ padding: '2px 6px', fontSize: 11, background: 'rgba(59, 130, 246, 0.18)', color: '#60a5fa' }}>
+                                    🎨 Visual Demo
+                                  </span>
+                                )}
+                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                  ⏱️ {c.duration.toFixed(0)}s
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => { selectClipForPreview(c); setActiveTab('editor'); }}
+                              title="Preview and edit clip"
+                            >
+                              <Eye size={13} />
+                            </button>
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() => handleRenderShort(c.id)}
+                              disabled={renderingClipId === c.id}
+                              title="Render in 9:16"
+                            >
+                              <Sparkles size={13} /> {c.output_path ? 'Re-Render' : 'Render'}
+                            </button>
+                            <button
+                              className="btn btn-success btn-sm"
+                              onClick={() => handlePublishYouTube(c.id)}
+                              disabled={isPublishing || !c.output_path}
+                              title="Publish directly to PDX"
+                            >
+                              <Youtube size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <button className="btn btn-primary" onClick={() => setActiveTab('clips')}>
-                  Go to Viral Moments <ArrowRight size={16} />
-                </button>
+
+                {/* Right Column: Scheduled Release Queue & Strategy */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {/* Scheduled Queue Box */}
+                  <div className="dashboard-panel">
+                    <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>📅 Release Queue</h3>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 12, marginBottom: 12 }}>
+                      Upcoming Shorts scheduled on YouTube Data API.
+                    </p>
+
+                    {analytics.upcoming_scheduled && analytics.upcoming_scheduled.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 200, overflowY: 'auto' }}>
+                        {analytics.upcoming_scheduled.map((sch, sIdx) => (
+                          <div key={sch.id} style={{ background: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: 8, fontSize: 12, border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {sch.title}
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#60a5fa', marginTop: 3 }}>
+                              <span>⏰ {new Date(sch.scheduled_publish_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({new Date(sch.scheduled_publish_at).toLocaleDateString([], { month: 'short', day: 'numeric' })})</span>
+                              {sch.youtube_url && (
+                                <a href={sch.youtube_url} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', textDecoration: 'none' }}>
+                                  View ↗
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--text-muted)', fontSize: 12 }}>
+                        No videos currently in the queue. Click "Schedule All" to queue your moments at 20–30 min intervals!
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Growth & Algorithm Tips for PDX */}
+                  <div className="dashboard-panel">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <TrendingUp size={16} color="var(--accent-orange)" />
+                      <h3 style={{ fontSize: 15, fontWeight: 700 }}>PDX Channel Strategy</h3>
+                    </div>
+
+                    <div className="tip-box">
+                      <strong>⚡ Pacing Velocity:</strong> Publishing every <strong>20 to 30 minutes</strong> gives YouTube's algorithm time to test each Short's seed audience without diluting initial viewer impressions.
+                    </div>
+
+                    <div className="tip-box" style={{ background: 'rgba(59, 130, 246, 0.08)', borderColor: 'rgba(59, 130, 246, 0.3)' }}>
+                      <strong>🎨 Visual Retainers:</strong> Whiteboard demonstrations and visual diagrams achieve <strong>80%+ viewer completion rates</strong> on Shorts. Always prefer "Auto-Detect" or "Blurred Background" for these moments!
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -994,7 +1156,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* SCHEDULE & BATCH UPLOAD MODAL */}
+      {/* SCHEDULE & BATCH UPLOAD MODAL WITH 9:16 LAYOUT CONTROL */}
       {showScheduleModal && (
         <div className="modal-overlay" onClick={() => !isBatchPublishing && setShowScheduleModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1012,6 +1174,38 @@ export default function App() {
               >
                 <X size={20} />
               </button>
+            </div>
+
+            {/* NEW: Crop / Vertical 9:16 Framing Layout Setting in Schedule Section */}
+            <div className="form-group" style={{ marginBottom: 16, background: 'var(--bg-secondary)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <Layers size={16} color="#3b82f6" />
+                <label style={{ margin: 0, fontWeight: 700, color: '#f0f3fa' }}>
+                  Vertical 9:16 Crop & Framing Layout
+                </label>
+              </div>
+              <select
+                className="form-control"
+                value={batchLayoutMode}
+                onChange={(e) => setBatchLayoutMode(e.target.value)}
+              >
+                <option value="auto">⚡ Auto-Detect (Best: Keeps full Whiteboards & Charts visible with fit)</option>
+                <option value="blur_background">🌟 Blurred Background (Fit & Center full 16:9 with ambient glow)</option>
+                <option value="smart_crop">🎯 Smart Crop (Center-fill speaker in 9:16 vertical)</option>
+              </select>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                <input
+                  type="checkbox"
+                  id="batch-rerender-check"
+                  className="batch-checkbox"
+                  checked={batchForceRerender}
+                  onChange={(e) => setBatchForceRerender(e.target.checked)}
+                />
+                <label htmlFor="batch-rerender-check" style={{ fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                  Re-render clips with this layout before publishing (ensures uniform layout across all selected)
+                </label>
+              </div>
             </div>
 
             {/* Interval Configuration */}

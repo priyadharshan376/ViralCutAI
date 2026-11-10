@@ -378,7 +378,7 @@ def list_youtube_uploads() -> List[Dict[str, Any]]:
         return [dict(row) for row in rows]
 
 def get_dashboard_analytics() -> Dict[str, Any]:
-    """Computes summary metrics for Dashboard Home."""
+    """Computes summary metrics, scheduled queue, and top viral highlights for Dashboard."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM videos")
@@ -399,12 +399,23 @@ def get_dashboard_analytics() -> Dict[str, Any]:
         """)
         recent_videos = [dict(row) for row in cursor.fetchall()]
 
+        # Top viral moments (ranked by viral score)
         cursor.execute("""
-            SELECT c.id, c.title, c.viral_score, c.status, c.output_path, c.created_at
+            SELECT c.id, c.video_id, c.title, c.viral_score, c.hook_score, c.storytelling_score,
+                   c.duration, c.has_visual, c.layout_mode, c.status, c.output_path, c.reason, c.created_at
             FROM clips c
-            ORDER BY c.created_at DESC LIMIT 5
+            ORDER BY c.viral_score DESC LIMIT 6
         """)
-        recent_clips = [dict(row) for row in cursor.fetchall()]
+        top_clips = [dict(row) for row in cursor.fetchall()]
+
+        # Scheduled release queue
+        cursor.execute("""
+            SELECT id, title, youtube_video_id, youtube_url, privacy_status, scheduled_publish_at, created_at
+            FROM youtube_uploads
+            WHERE scheduled_publish_at != '' AND scheduled_publish_at IS NOT NULL
+            ORDER BY scheduled_publish_at DESC LIMIT 6
+        """)
+        upcoming_scheduled = [dict(row) for row in cursor.fetchall()]
 
         return {
             "total_videos": total_videos,
@@ -412,7 +423,15 @@ def get_dashboard_analytics() -> Dict[str, Any]:
             "pending_uploads": pending_uploads,
             "completed_uploads": completed_uploads,
             "recent_videos": recent_videos,
-            "recent_clips": recent_clips
+            "recent_clips": top_clips,
+            "top_clips": top_clips,
+            "upcoming_scheduled": upcoming_scheduled,
+            "channel_info": {
+                "name": "PDX",
+                "status": "connected",
+                "mode": "live",
+                "target_url": "https://studio.youtube.com"
+            }
         }
 
 

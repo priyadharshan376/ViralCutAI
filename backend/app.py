@@ -208,6 +208,8 @@ class BatchYouTubeUploadRequest(BaseModel):
     start_now: bool = Field(default=True)
     custom_start_time: Optional[str] = None
     privacy_status: str = Field(default="public")
+    layout_mode: str = Field(default="auto", description="'auto', 'blur_background', or 'smart_crop'")
+    force_rerender: bool = Field(default=False)
 
 @app.get("/api/dashboard/analytics")
 def get_dashboard_analytics_endpoint():
@@ -315,14 +317,15 @@ def batch_upload_clips_to_youtube_endpoint(req: BatchYouTubeUploadRequest):
             errors.append({"clip_id": clip_id, "error": "Clip not found"})
             continue
 
-        # Auto-render if not already rendered
-        if not clip.get("output_path") or not os.path.exists(clip["output_path"]):
+        # Auto-render if not already rendered or if force_rerender is requested
+        needs_render = not clip.get("output_path") or not os.path.exists(clip["output_path"]) or req.force_rerender
+        if needs_render:
             try:
-                logger.info(f"Clip {clip_id} not yet rendered. Auto-rendering before batch upload...")
-                clip = render_clip_pipeline(clip_id=clip_id)
+                logger.info(f"Rendering clip {clip_id} with layout_mode='{req.layout_mode}' before batch upload...")
+                clip = render_clip_pipeline(clip_id=clip_id, layout_mode=req.layout_mode)
             except Exception as r_err:
-                logger.error(f"Auto-rendering failed for {clip_id}: {r_err}")
-                errors.append({"clip_id": clip_id, "error": f"Auto-rendering failed: {str(r_err)}"})
+                logger.error(f"Rendering failed for {clip_id}: {r_err}")
+                errors.append({"clip_id": clip_id, "error": f"Rendering failed: {str(r_err)}"})
                 continue
 
         # Calculate staggered schedule timestamp
