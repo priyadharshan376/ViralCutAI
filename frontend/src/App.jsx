@@ -525,7 +525,7 @@ export default function App() {
                     <Upload size={32} />
                   </div>
                   <h3>{uploadFile ? uploadFile.name : 'Select or drop video file here'}</h3>
-                  <p>{uploadFile ? `${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB` : 'Up to 1 GB • 720p/1080p supported'}</p>
+                  <p>{uploadFile ? `${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB` : 'Up to 1.5 GB • 720p/1080p/4K supported'}</p>
                 </div>
 
                 {isProcessing && (

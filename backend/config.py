@@ -22,7 +22,7 @@ WHISPER_CPU_THREADS = int(os.getenv("WHISPER_CPU_THREADS", "4"))
 
 # Video & File Upload Restrictions
 SUPPORTED_EXTENSIONS = [".mp4", ".mov", ".mkv", ".avi"]
-MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "1024"))  # 1GB limit default
+MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "1536"))  # 1.5GB limit default
 
 # FFmpeg Executables
 import shutil
