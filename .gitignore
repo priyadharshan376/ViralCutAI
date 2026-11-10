@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# Environment Variables & OAuth Credentials (CRITICAL SECURITY)
+.env
+*.env
+client_secrets*.json
+*token*.json
+backend/database/youtube_token.json
+
+# Node & Frontend
+node_modules/
+frontend/node_modules/
+
+# Media & Models
+videos/uploads/*
+!videos/uploads/.gitkeep
+output/*
+!output/.gitkeep
+temp/*
+!temp/.gitkeep
+models/*
+!models/.gitkeep
+
+# Database
+backend/database/*.db
+backend/database/*.db-journal
+
+# Logs & System
+*.log
+.system_generated/
