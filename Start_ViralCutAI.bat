@@ -16,19 +16,16 @@ if not exist ".\venv\Scripts\python.exe" (
     exit /b 1
 )
 
-:: 2. Check if server is already running on port 8000
-netstat -ano | findstr ":8000" | findstr "LISTENING" >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [INFO] ViralCut AI server is already running on http://localhost:8000
-    echo Opening dashboard in your browser...
-    start http://localhost:8000
-    goto RUNNING_LOOP
+:: 2. Ensure port 8000 is clean (terminate any stale background instances)
+echo [1/3] Checking port 8000 and refreshing server instance...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8000" ^| findstr "LISTENING"') do (
+    echo [INFO] Stopping previous server instance (PID %%a)...
+    taskkill /PID %%a /F >nul 2>&1
 )
+timeout /t 1 /nobreak >nul
 
-:: 3. Start the server
-echo [1/3] Initializing SQLite database and AI modules...
-echo [2/3] Starting ViralCut AI backend on http://127.0.0.1:8000 ...
-
+:: 3. Start the server with latest code
+echo [2/3] Starting latest ViralCut AI backend (1.5GB limit + YouTube link engine)...
 start /b "" ".\venv\Scripts\python.exe" -m uvicorn backend.app:app --host 127.0.0.1 --port 8000 > "D:\ViralCutAI\server.log" 2>&1
 
 :: Wait 2 seconds for uvicorn to bind
@@ -48,6 +45,8 @@ echo ========================================================================
 echo   [READY] ViralCut AI is live!
 echo   Dashboard URL: http://localhost:8000
 echo   YouTube Channel: PDX (Connected & Live)
+echo   Max Upload Limit: 1.5 GB
+echo   Features: Local Video Upload & Direct YouTube Link Downloader
 echo ========================================================================
 echo.
 echo Opening dashboard in your browser...

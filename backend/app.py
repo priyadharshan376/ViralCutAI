@@ -82,7 +82,10 @@ def root(request: Request):
     accept = request.headers.get("accept", "")
     index_file = FRONTEND_DIST / "index.html"
     if "text/html" in accept and index_file.exists():
-        return FileResponse(str(index_file))
+        return FileResponse(
+            str(index_file),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+        )
     return {
         "project": "ViralCut AI",
         "status": "online",
@@ -98,7 +101,10 @@ def root(request: Request):
 def dashboard_view():
     index_file = FRONTEND_DIST / "index.html"
     if index_file.exists():
-        return FileResponse(str(index_file))
+        return FileResponse(
+            str(index_file),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+        )
     raise HTTPException(status_code=404, detail="Frontend build not found.")
 
 @app.post("/api/videos/upload")

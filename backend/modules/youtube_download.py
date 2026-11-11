@@ -2,11 +2,12 @@ import os
 import re
 import uuid
 import logging
+import shutil
 from pathlib import Path
 from typing import Dict, Any, Optional
 
 import yt_dlp
-from backend.config import VIDEOS_DIR, FFMPEG_CMD
+from backend.config import VIDEOS_DIR, FFMPEG_CMD, BASE_DIR, BACKEND_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -18,17 +19,51 @@ def is_valid_youtube_url(url: str) -> bool:
     """Validate if string is a recognized YouTube URL."""
     return bool(YOUTUBE_URL_REGEX.search(url.strip()))
 
+def get_base_ydl_opts() -> Dict[str, Any]:
+    """
+    Constructs robust yt-dlp options configured with Node.js JS runtime,
+    FFmpeg binary, and optional cookies.txt if provided.
+    """
+    opts: Dict[str, Any] = {
+        'quiet': False,
+        'no_warnings': True,
+        'nocheckcertificate': True
+    }
+
+    # Enable Node.js runtime to solve YouTube's n-sig & bot verification challenges
+    node_path = shutil.which("node") or "C:\\Program Files\\nodejs\\node.exe"
+    if os.path.exists(node_path):
+        opts['js_runtimes'] = {'node': {'path': node_path}}
+
+    # Set FFmpeg location
+    ffmpeg_exe = shutil.which("ffmpeg") or FFMPEG_CMD
+    if ffmpeg_exe and os.path.exists(ffmpeg_exe):
+        opts['ffmpeg_location'] = ffmpeg_exe
+
+    # Check for optional cookies.txt in root or backend
+    for candidate in [
+        BASE_DIR / "cookies.txt",
+        BACKEND_DIR / "cookies.txt",
+        BASE_DIR / "youtube_cookies.txt",
+    ]:
+        if candidate.exists():
+            opts['cookiefile'] = str(candidate.resolve())
+            logger.info(f"Loaded YouTube cookies from {candidate}")
+            break
+
+    return opts
+
 def inspect_youtube_video(url: str) -> Dict[str, Any]:
     """
-    Fetches video metadata (title, duration, thumbnail, author)
-    without downloading the video file.
+    Fetches video metadata (title, duration, thumbnail, author, available resolutions)
+    without downloading the full video file.
     """
     clean_url = url.strip()
-    ydl_opts = {
-        'skip_download': True,
+    ydl_opts = get_base_ydl_opts()
+    ydl_opts.update({
         'quiet': True,
         'no_warnings': True
-    }
+    })
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -59,7 +94,11 @@ def inspect_youtube_video(url: str) -> Dict[str, Any]:
             }
     except Exception as e:
         logger.error(f"Failed to inspect YouTube URL '{clean_url}': {e}")
-        raise ValueError(f"Could not load YouTube video: {str(e)}")
+        # Helpful error context if YouTube flags cookies
+        err_msg = str(e)
+        if "Sign in to confirm you’re not a bot" in err_msg or "Sign in to confirm you're not a bot" in err_msg:
+            err_msg = "YouTube bot check triggered. Please place a cookies.txt file in the project folder or verify network access."
+        raise ValueError(f"Could not load YouTube video: {err_msg}")
 
 def download_youtube_video(
     url: str,
@@ -80,7 +119,7 @@ def download_youtube_video(
 
     if res_num and res_num.isdigit():
         height_val = int(res_num)
-        # Select best mp4 video stream <= height_val + best m4a audio, fallback to any codec
+        # Select best mp4 video stream <= height_val + best audio, fallback to any codec
         format_selector = (
             f"bestvideo[height<={height_val}][ext=mp4]+bestaudio[ext=m4a]/"
             f"bestvideo[height<={height_val}]+bestaudio/"
@@ -89,20 +128,14 @@ def download_youtube_video(
     else:
         format_selector = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
 
-    ydl_opts = {
+    ydl_opts = get_base_ydl_opts()
+    ydl_opts.update({
         'format': format_selector,
         'outtmpl': out_template,
         'merge_output_format': 'mp4',
-        'quiet': False,
-        'no_warnings': True,
         'retries': 3,
         'fragment_retries': 3,
-        'nocheckcertificate': True
-    }
-
-    if FFMPEG_CMD:
-        ffmpeg_dir = str(Path(FFMPEG_CMD).parent)
-        ydl_opts['ffmpeg_location'] = ffmpeg_dir
+    })
 
     try:
         logger.info(f"[{video_id}] Starting yt-dlp download for: {clean_url} (target res: {target_resolution})")
@@ -136,4 +169,7 @@ def download_youtube_video(
         }
     except Exception as e:
         logger.error(f"[{video_id}] yt-dlp download failed: {e}")
-        raise RuntimeError(f"YouTube download error: {str(e)}")
+        err_msg = str(e)
+        if "Sign in to confirm you’re not a bot" in err_msg or "Sign in to confirm you're not a bot" in err_msg:
+            err_msg = "YouTube bot check triggered. Please place a cookies.txt in the ViralCutAI folder or try again in a few moments."
+        raise RuntimeError(f"YouTube download error: {err_msg}")
