@@ -23,7 +23,9 @@ import {
   ExternalLink,
   Zap,
   TrendingUp,
-  Layers
+  Layers,
+  Link2,
+  Search
 } from 'lucide-react';
 
 const API_BASE = 'http://127.0.0.1:8000';
@@ -66,7 +68,12 @@ export default function App() {
   const [batchResults, setBatchResults] = useState(null);
 
   // Upload & Pipeline State
+  const [uploadMode, setUploadMode] = useState('local'); // 'local' | 'youtube'
   const [uploadFile, setUploadFile] = useState(null);
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [youtubeResolution, setYoutubeResolution] = useState('720p');
+  const [isInspecting, setIsInspecting] = useState(false);
+  const [youtubeMetadata, setYoutubeMetadata] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [processingStatus, setProcessingStatus] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -234,6 +241,100 @@ export default function App() {
     } catch (err) {
       setIsProcessing(false);
       alert(err.message);
+    }
+  };
+
+  // YouTube Inspect Handler
+  const handleInspectYoutubeUrl = async () => {
+    if (!youtubeUrl.trim()) return;
+    setIsInspecting(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/videos/youtube-inspect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: youtubeUrl.trim() })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Could not fetch YouTube video details');
+      }
+      const data = await res.json();
+      setYoutubeMetadata(data);
+      if (data.available_resolutions && data.available_resolutions.length > 0) {
+        setYoutubeResolution(data.available_resolutions.includes('1080p') ? '1080p' : data.available_resolutions[0]);
+      }
+    } catch (err) {
+      alert(`YouTube Inspect Error: ${err.message}`);
+    } finally {
+      setIsInspecting(false);
+    }
+  };
+
+  // YouTube Download & Process Pipeline Handler
+  const handleYoutubeDownloadSubmit = async (e) => {
+    e.preventDefault();
+    if (!youtubeUrl.trim()) return;
+
+    setIsProcessing(true);
+    setUploadProgress(15);
+    setProcessingStatus(`Connecting & downloading YouTube video in ${youtubeResolution}...`);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/videos/youtube-download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: youtubeUrl.trim(),
+          resolution: youtubeResolution
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'YouTube download failed');
+      }
+
+      const data = await res.json();
+      const videoId = data.video.id;
+
+      setUploadProgress(35);
+      setProcessingStatus('Download complete! Extracting audio & preparing Faster-Whisper CPU INT8...');
+
+      const pollInterval = setInterval(async () => {
+        try {
+          const stRes = await fetch(`${API_BASE}/api/videos/${videoId}/status`);
+          if (stRes.ok) {
+            const stData = await stRes.json();
+            if (stData.status === 'transcribing') {
+              setProcessingStatus('Transcribing speech with word-level timestamps...');
+              setUploadProgress(60);
+            } else if (stData.status === 'detecting_clips') {
+              setProcessingStatus('Analyzing 6 viral dimensions & segmenting distinct narrative moments...');
+              setUploadProgress(85);
+            } else if (stData.status === 'completed') {
+              clearInterval(pollInterval);
+              setProcessingStatus('Completed! Distinct viral moments ready.');
+              setUploadProgress(100);
+              setIsProcessing(false);
+              await fetchVideos();
+              await fetchAnalytics();
+              setSelectedVideo(stData);
+              await loadClipsForVideo(videoId);
+              setActiveTab('clips');
+            } else if (stData.status === 'failed') {
+              clearInterval(pollInterval);
+              setIsProcessing(false);
+              alert(`Processing failed: ${stData.error_message}`);
+            }
+          }
+        } catch (err) {
+          console.error('Poll error:', err);
+        }
+      }, 1500);
+
+    } catch (err) {
+      setIsProcessing(false);
+      alert(`YouTube Download error: ${err.message}`);
     }
   };
 
@@ -464,6 +565,13 @@ export default function App() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => { setUploadMode('youtube'); setActiveTab('upload'); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Link2 size={14} /> Import from YouTube
+                  </button>
                   <a
                     href="https://studio.youtube.com"
                     target="_blank"
@@ -663,37 +771,154 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 2: NEW PROJECT UPLOAD */}
+          {/* TAB 2: NEW PROJECT (LOCAL UPLOAD OR YOUTUBE URL) */}
           {activeTab === 'upload' && (
-            <div style={{ maxWidth: 700, margin: '0 auto' }}>
+            <div style={{ maxWidth: 720, margin: '0 auto' }}>
               <div className="editor-form">
-                <h2 style={{ fontSize: 20, fontWeight: 700 }}>Upload Video Project</h2>
-                <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-                  Supports MP4, MOV, MKV, AVI. The video will be transcribed and analyzed for complete narrative story arcs and whiteboard demonstrations.
-                </p>
-
-                <div
-                  className="dropzone"
-                  onClick={() => document.getElementById('file-input').click()}
-                >
-                  <input
-                    id="file-input"
-                    type="file"
-                    accept="video/mp4,video/quicktime,video/x-matroska,video/x-msvideo"
-                    style={{ display: 'none' }}
-                    onChange={(e) => setUploadFile(e.target.files[0])}
-                  />
-                  <div className="dropzone-icon">
-                    <Upload size={32} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div>
+                    <h2 style={{ fontSize: 20, fontWeight: 700 }}>New Video Project</h2>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 2 }}>
+                      Add a video to detect complete narrative story moments and whiteboard visuals.
+                    </p>
                   </div>
-                  <h3>{uploadFile ? uploadFile.name : 'Select or drop video file here'}</h3>
-                  <p>{uploadFile ? `${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB` : 'Up to 1.5 GB • 720p/1080p/4K supported'}</p>
                 </div>
 
+                {/* Mode Switcher Tabs */}
+                <div className="upload-mode-switcher">
+                  <button
+                    type="button"
+                    className={`mode-tab-btn ${uploadMode === 'local' ? 'active' : ''}`}
+                    onClick={() => setUploadMode('local')}
+                  >
+                    <Upload size={16} /> Upload Local File (Up to 1.5 GB)
+                  </button>
+                  <button
+                    type="button"
+                    className={`mode-tab-btn ${uploadMode === 'youtube' ? 'active' : ''}`}
+                    onClick={() => setUploadMode('youtube')}
+                  >
+                    <Link2 size={16} /> Paste YouTube Link
+                  </button>
+                </div>
+
+                {/* MODE 1: LOCAL FILE DROPZONE */}
+                {uploadMode === 'local' && (
+                  <div>
+                    <div
+                      className="dropzone"
+                      onClick={() => document.getElementById('file-input').click()}
+                    >
+                      <input
+                        id="file-input"
+                        type="file"
+                        accept="video/mp4,video/quicktime,video/x-matroska,video/x-msvideo"
+                        style={{ display: 'none' }}
+                        onChange={(e) => setUploadFile(e.target.files[0])}
+                      />
+                      <div className="dropzone-icon">
+                        <Upload size={32} />
+                      </div>
+                      <h3>{uploadFile ? uploadFile.name : 'Select or drop video file here'}</h3>
+                      <p>{uploadFile ? `${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB` : 'Supports MP4, MOV, MKV, AVI • Up to 1.5 GB'}</p>
+                    </div>
+
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleUploadSubmit}
+                      disabled={!uploadFile || isProcessing}
+                      style={{ width: '100%', padding: '14px' }}
+                    >
+                      <Sparkles size={18} />
+                      {isProcessing ? 'Processing Pipeline...' : 'Start AI Story Analysis'}
+                    </button>
+                  </div>
+                )}
+
+                {/* MODE 2: YOUTUBE URL DOWNLOAD & RESOLUTION SELECTOR */}
+                {uploadMode === 'youtube' && (
+                  <div>
+                    <div className="form-group" style={{ marginBottom: 16 }}>
+                      <label>Paste YouTube Video or Shorts URL</label>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="https://www.youtube.com/watch?v=... or https://youtu.be/..."
+                          value={youtubeUrl}
+                          onChange={(e) => {
+                            setYoutubeUrl(e.target.value);
+                            setYoutubeMetadata(null);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={handleInspectYoutubeUrl}
+                          disabled={!youtubeUrl.trim() || isInspecting || isProcessing}
+                          style={{ whiteSpace: 'nowrap' }}
+                        >
+                          <Search size={15} />
+                          {isInspecting ? 'Fetching...' : 'Inspect Video'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* YouTube Video Preview Card */}
+                    {youtubeMetadata && (
+                      <div className="yt-preview-card">
+                        {youtubeMetadata.thumbnail && (
+                          <div className="yt-thumb-box">
+                            <img src={youtubeMetadata.thumbnail} alt="YouTube thumbnail" />
+                          </div>
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>
+                            {youtubeMetadata.title}
+                          </h4>
+                          <div style={{ display: 'flex', gap: 12, fontSize: 12, color: 'var(--text-secondary)' }}>
+                            <span>📺 {youtubeMetadata.channel}</span>
+                            <span>⏱️ {Math.floor(youtubeMetadata.duration / 60)}m {youtubeMetadata.duration % 60}s</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Target Resolution Selection */}
+                    <div className="form-group" style={{ marginBottom: 20 }}>
+                      <label>Download Resolution</label>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                        {['1080p', '720p', '480p', 'Best Available'].map((res) => (
+                          <button
+                            key={res}
+                            type="button"
+                            className={`btn-chip ${youtubeResolution === res ? 'selected' : ''}`}
+                            onClick={() => setYoutubeResolution(res)}
+                            disabled={isProcessing}
+                          >
+                            {res === '1080p' ? '1080p (Full HD - Best Quality)' : (res === '720p' ? '720p (HD - Fast Download)' : res)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleYoutubeDownloadSubmit}
+                      disabled={!youtubeUrl.trim() || isProcessing}
+                      style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg, #ef4444, #8b5cf6)' }}
+                    >
+                      <Download size={18} />
+                      {isProcessing ? 'Processing Pipeline...' : `Download ${youtubeResolution} & Start AI Story Detection`}
+                    </button>
+                  </div>
+                )}
+
+                {/* Pipeline Progress Display */}
                 {isProcessing && (
-                  <div style={{ background: 'var(--bg-secondary)', padding: 16, borderRadius: 8 }}>
+                  <div style={{ background: 'var(--bg-secondary)', padding: 16, borderRadius: 8, marginTop: 18, border: '1px solid var(--border-color)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                      <span>{processingStatus}</span>
+                      <span style={{ color: '#60a5fa', fontWeight: 600 }}>{processingStatus}</span>
                       <span style={{ fontWeight: 700 }}>{uploadProgress}%</span>
                     </div>
                     <div className="progress-bar-container">
@@ -701,16 +926,6 @@ export default function App() {
                     </div>
                   </div>
                 )}
-
-                <button
-                  className="btn btn-primary"
-                  onClick={handleUploadSubmit}
-                  disabled={!uploadFile || isProcessing}
-                  style={{ width: '100%', padding: '14px' }}
-                >
-                  <Sparkles size={18} />
-                  {isProcessing ? 'Processing Pipeline...' : 'Start AI Analysis'}
-                </button>
               </div>
             </div>
           )}

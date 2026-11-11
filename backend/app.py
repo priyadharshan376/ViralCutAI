@@ -31,6 +31,7 @@ from backend.database.db import (
 from backend.modules.video_input import save_uploaded_video
 from backend.modules.clip_detection import detect_and_rank_clips
 from backend.modules.youtube_upload import get_youtube_uploader
+from backend.modules.youtube_download import is_valid_youtube_url, inspect_youtube_video, download_youtube_video
 from backend.services.processing_service import process_video_pipeline, render_clip_pipeline
 from pydantic import BaseModel, Field
 
@@ -128,6 +129,72 @@ async def upload_video(
         "message": "Video uploaded successfully. Processing pipeline started in background.",
         "video": video_record
     }
+
+class YouTubeInspectRequest(BaseModel):
+    url: str
+
+class YouTubeDownloadProjectRequest(BaseModel):
+    url: str
+    resolution: str = Field(default="720p", description="Target resolution: '1080p', '720p', '480p', or 'best'")
+
+@app.post("/api/videos/youtube-inspect")
+def inspect_youtube_endpoint(req: YouTubeInspectRequest):
+    """
+    Validates a YouTube link and fetches metadata (title, duration, thumbnail, available resolutions)
+    before downloading.
+    """
+    if not is_valid_youtube_url(req.url):
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL. Please provide a valid YouTube video or Shorts link.")
+    try:
+        data = inspect_youtube_video(req.url)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/videos/youtube-download")
+async def download_youtube_project_endpoint(
+    background_tasks: BackgroundTasks,
+    req: YouTubeDownloadProjectRequest
+):
+    """
+    Downloads a YouTube video at the selected resolution, saves it to disk,
+    registers it in SQLite, and launches the processing pipeline in the background.
+    """
+    if not is_valid_youtube_url(req.url):
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL. Please provide a valid YouTube video or Shorts link.")
+
+    video_id = str(uuid.uuid4())
+    logger.info(f"Incoming YouTube download request: {req.url} (resolution: {req.resolution})")
+
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        download_info = await loop.run_in_executor(
+            None,
+            download_youtube_video,
+            req.url,
+            video_id,
+            req.resolution
+        )
+
+        video_record = create_video_record(
+            video_id=video_id,
+            filename=download_info["filename"],
+            filepath=download_info["filepath"],
+            file_size=download_info["file_size"]
+        )
+
+        background_tasks.add_task(process_video_pipeline, video_id)
+
+        return {
+            "success": True,
+            "message": f"YouTube video '{download_info['title']}' downloaded. Processing pipeline started in background.",
+            "video": video_record,
+            "details": download_info
+        }
+    except Exception as e:
+        logger.exception(f"Failed to download and process YouTube video: {e}")
+        raise HTTPException(status_code=500, detail=f"YouTube download failed: {str(e)}")
 
 @app.get("/api/videos")
 def get_all_videos():
