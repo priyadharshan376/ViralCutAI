@@ -1326,6 +1326,34 @@ export default function App() {
                 </button>
               </div>
 
+              {/* Informational Alert if Daily Limit Exceeded */}
+              {uploads.some(u => (u.error_message || '').includes('uploadLimitExceeded')) && (
+                <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', borderRadius: 10, padding: 14, marginBottom: 18, fontSize: 13 }}>
+                  <div style={{ fontWeight: 700, color: '#f87171', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    ⚠️ YouTube Daily Upload Quota Limit Reached
+                  </div>
+                  <p style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                    Google has a strict limit on brand new channels (around 3 to 10 videos per day) until the channel is verified.
+                    To unlock 50+ to 100 daily Shorts uploads:
+                  </p>
+                  <ol style={{ paddingLeft: 18, marginTop: 6, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    <li>Go to <strong>YouTube Studio &gt; Settings &gt; Channel &gt; Feature eligibility</strong></li>
+                    <li>Verify your <strong>Phone Number</strong> under <em>Intermediate features</em>.</li>
+                    <li>Enable <em>Advanced features</em> (via video verification or 2 months of channel history).</li>
+                  </ol>
+                  <div style={{ marginTop: 8 }}>
+                    <a
+                      href="https://studio.youtube.com/channel/UC/editing/details"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: '#60a5fa', fontWeight: 600 }}
+                    >
+                      Open YouTube Studio Feature Eligibility ↗
+                    </a>
+                  </div>
+                </div>
+              )}
+
               {uploads.length === 0 ? (
                 <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No Shorts uploaded to YouTube yet.</p>
               ) : (
@@ -1334,7 +1362,7 @@ export default function App() {
                     <tr>
                       <th>Title</th>
                       <th>Privacy</th>
-                      <th>Status</th>
+                      <th>Status / Reason</th>
                       <th>Scheduled Release</th>
                       <th>YouTube Link</th>
                       <th>Uploaded At</th>
@@ -1347,8 +1375,15 @@ export default function App() {
                         <td>{u.privacy_status}</td>
                         <td>
                           <span style={{ color: u.upload_status === 'published' ? '#10b981' : '#ef4444', fontWeight: 700 }}>
-                            {u.upload_status}
+                            {u.upload_status === 'published' ? '✓ Published' : '✕ Failed'}
                           </span>
+                          {u.error_message && (
+                            <div style={{ fontSize: 11, color: '#f87171', marginTop: 4, maxWidth: 220 }}>
+                              {u.error_message.includes('uploadLimitExceeded')
+                                ? '⚠️ Daily limit exceeded by YouTube (Verify channel phone number)'
+                                : u.error_message.slice(0, 80)}
+                            </div>
+                          )}
                         </td>
                         <td style={{ color: u.scheduled_publish_at ? '#60a5fa' : 'var(--text-muted)' }}>
                           {u.scheduled_publish_at ? `📅 ${new Date(u.scheduled_publish_at).toLocaleString()}` : 'Immediate'}
