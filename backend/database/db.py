@@ -95,6 +95,8 @@ def init_db():
             cursor.execute("ALTER TABLE clips ADD COLUMN has_visual INTEGER DEFAULT 0")
         if "layout_mode" not in columns:
             cursor.execute("ALTER TABLE clips ADD COLUMN layout_mode TEXT DEFAULT 'auto'")
+        if "subtitle_style" not in columns:
+            cursor.execute("ALTER TABLE clips ADD COLUMN subtitle_style TEXT DEFAULT 'hormozi'")
         
         # YouTube Uploads table (Phase 4)
         cursor.execute("""
@@ -300,7 +302,9 @@ def update_clip_render_result(
     output_path: str,
     title: Optional[str] = None,
     description: Optional[str] = None,
-    hashtags: Optional[str] = None
+    hashtags: Optional[str] = None,
+    layout_mode: Optional[str] = None,
+    subtitle_style: Optional[str] = None
 ):
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -310,10 +314,12 @@ def update_clip_render_result(
                 title = COALESCE(?, title),
                 description = COALESCE(?, description),
                 hashtags = COALESCE(?, hashtags),
+                layout_mode = COALESCE(?, layout_mode),
+                subtitle_style = COALESCE(?, subtitle_style),
                 status = 'rendered',
                 rendered_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        """, (output_path, title, description, hashtags, clip_id))
+        """, (output_path, title, description, hashtags, layout_mode, subtitle_style, clip_id))
         conn.commit()
 
 def delete_clips_for_video(video_id: str):

@@ -32,6 +32,8 @@ from backend.modules.video_input import save_uploaded_video
 from backend.modules.clip_detection import detect_and_rank_clips
 from backend.modules.youtube_upload import get_youtube_uploader
 from backend.modules.youtube_download import is_valid_youtube_url, inspect_youtube_video, download_youtube_video
+from backend.modules.youtube_discovery import DISCOVERY_PRESETS, discover_best_youtube_videos
+from backend.modules.subtitle_generator import get_subtitle_styles_metadata
 from backend.services.processing_service import process_video_pipeline, render_clip_pipeline
 from pydantic import BaseModel, Field
 
@@ -142,6 +144,41 @@ class YouTubeInspectRequest(BaseModel):
 class YouTubeDownloadProjectRequest(BaseModel):
     url: str
     resolution: str = Field(default="720p", description="Target resolution: '1080p', '720p', '480p', or 'best'")
+
+class DiscoverYouTubeRequest(BaseModel):
+    query: str = Field(default="GTA 6 trailer breakdown hidden details gameplay secrets")
+    min_duration_minutes: int = Field(default=5, ge=3, le=120)
+    max_duration_minutes: int = Field(default=120, ge=5, le=300)
+    max_results: int = Field(default=12, ge=3, le=25)
+    sort_by: str = Field(default="clip_potential", description="'clip_potential' or 'max_views'")
+
+@app.get("/api/youtube/discover/presets")
+def get_youtube_discovery_presets():
+    """Returns curated niche presets optimized for high-retention Shorts clipping."""
+    return {"presets": DISCOVERY_PRESETS}
+
+@app.post("/api/youtube/discover")
+async def discover_youtube_videos_endpoint(req: DiscoverYouTubeRequest):
+    """
+    Runs the Clip-Potential Discovery Algorithm on YouTube to find & rank
+    the best long-form videos for clipping into viral Shorts.
+    """
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            discover_best_youtube_videos,
+            req.query,
+            req.min_duration_minutes,
+            req.max_duration_minutes,
+            req.max_results,
+            req.sort_by
+        )
+        return result
+    except Exception as e:
+        logger.exception(f"YouTube discovery failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/videos/youtube-inspect")
 def inspect_youtube_endpoint(req: YouTubeInspectRequest):
@@ -268,6 +305,8 @@ class UpdateClipRequest(BaseModel):
 class RenderClipRequest(BaseModel):
     layout_mode: str = Field(default="auto", description="'auto', 'blur_background', or 'smart_crop'")
     include_subtitles: bool = Field(default=True)
+    subtitle_style: str = Field(default="hormozi", description="Subtitle preset ID")
+    quality_preset: str = Field(default="high", description="'ultra', 'high', or 'balanced'")
 
 class YouTubeUploadRequest(BaseModel):
     privacy_status: str = Field(default="public", description="'public', 'unlisted', or 'private'")
@@ -282,7 +321,14 @@ class BatchYouTubeUploadRequest(BaseModel):
     custom_start_time: Optional[str] = None
     privacy_status: str = Field(default="public")
     layout_mode: str = Field(default="auto", description="'auto', 'blur_background', or 'smart_crop'")
+    subtitle_style: str = Field(default="hormozi", description="Subtitle preset ID")
+    quality_preset: str = Field(default="high", description="'ultra', 'high', or 'balanced'")
     force_rerender: bool = Field(default=False)
+
+@app.get("/api/subtitle-styles")
+def get_subtitle_styles_endpoint():
+    """Returns popular creator subtitle styles and preview metadata."""
+    return {"styles": get_subtitle_styles_metadata()}
 
 @app.get("/api/dashboard/analytics")
 def get_dashboard_analytics_endpoint():
@@ -394,8 +440,14 @@ def batch_upload_clips_to_youtube_endpoint(req: BatchYouTubeUploadRequest):
         needs_render = not clip.get("output_path") or not os.path.exists(clip["output_path"]) or req.force_rerender
         if needs_render:
             try:
-                logger.info(f"Rendering clip {clip_id} with layout_mode='{req.layout_mode}' before batch upload...")
-                clip = render_clip_pipeline(clip_id=clip_id, layout_mode=req.layout_mode)
+                logger.info(f"Rendering clip {clip_id} with layout_mode='{req.layout_mode}', subtitle='{req.subtitle_style}', quality='{req.quality_preset}'...")
+                clip = render_clip_pipeline(
+                    clip_id=clip_id,
+                    layout_mode=req.layout_mode,
+                    include_subtitles=(req.subtitle_style != "none"),
+                    subtitle_style=req.subtitle_style,
+                    quality_preset=req.quality_preset
+                )
             except Exception as r_err:
                 logger.error(f"Rendering failed for {clip_id}: {r_err}")
                 errors.append({"clip_id": clip_id, "error": f"Rendering failed: {str(r_err)}"})
@@ -493,7 +545,9 @@ def render_clip_endpoint(clip_id: str, req: RenderClipRequest = RenderClipReques
         updated_clip = render_clip_pipeline(
             clip_id=clip_id,
             layout_mode=req.layout_mode,
-            include_subtitles=req.include_subtitles
+            include_subtitles=(req.include_subtitles and req.subtitle_style != "none"),
+            subtitle_style=req.subtitle_style,
+            quality_preset=req.quality_preset
         )
         return {
             "success": True,

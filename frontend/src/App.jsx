@@ -25,10 +25,22 @@ import {
   TrendingUp,
   Layers,
   Link2,
-  Search
+  Search,
+  Type,
+  Film
 } from 'lucide-react';
 
 const API_BASE = 'http://127.0.0.1:8000';
+
+const DEFAULT_SUBTITLE_STYLES = [
+  { id: 'hormozi', name: 'Hormozi Bold', description: 'Chunky Impact uppercase + yellow pop', preview_bg: '#111827', preview_text: '#FFFFFF', preview_accent: '#FFEA00', uppercase: true },
+  { id: 'mrbeast', name: 'MrBeast Pop', description: 'Giant Impact + neon green highlight', preview_bg: '#0f172a', preview_text: '#FFFFFF', preview_accent: '#33FF48', uppercase: true },
+  { id: 'tiktok_box', name: 'TikTok Pill Box', description: 'Dark contrast box + yellow focus', preview_bg: '#000000', preview_text: '#FFFFFF', preview_accent: '#FFEA00', uppercase: false },
+  { id: 'neon_cyan', name: 'Neon Cyber Cyan', description: 'Tech style glowing cyan word pop', preview_bg: '#082f49', preview_text: '#FFFFFF', preview_accent: '#00FFFF', uppercase: true },
+  { id: 'iman_clean', name: 'Creator Minimal', description: 'Clean sentence case + amber accent', preview_bg: '#1e293b', preview_text: '#F5F5F5', preview_accent: '#FFB838', uppercase: false },
+  { id: 'podcast_yellow', name: 'Cinema Yellow', description: 'Classic warm-yellow film captions', preview_bg: '#18181b', preview_text: '#FFE026', preview_accent: '#FFE026', uppercase: false },
+  { id: 'red_hook', name: 'Red Alert Hook', description: 'Bold white + crimson red hook pop', preview_bg: '#2a0a0a', preview_text: '#FFFFFF', preview_accent: '#FF3B3B', uppercase: true },
+];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -62,10 +74,15 @@ export default function App() {
   const [scheduleStartNow, setScheduleStartNow] = useState(true);
   const [customStartTime, setCustomStartTime] = useState('');
   const [batchLayoutMode, setBatchLayoutMode] = useState('auto');
+  const [batchSubtitleStyle, setBatchSubtitleStyle] = useState('hormozi');
+  const [batchQualityPreset, setBatchQualityPreset] = useState('high');
   const [batchForceRerender, setBatchForceRerender] = useState(false);
   const [isBatchPublishing, setIsBatchPublishing] = useState(false);
   const [batchProgressText, setBatchProgressText] = useState('');
   const [batchResults, setBatchResults] = useState(null);
+
+  // Active Job State for Real-Time Progress Bar & Activity Tracking
+  const [activeJob, setActiveJob] = useState(null);
 
   // Upload & Pipeline State
   const [uploadMode, setUploadMode] = useState('local'); // 'local' | 'youtube'
@@ -82,16 +99,160 @@ export default function App() {
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editLayout, setEditLayout] = useState('auto');
+  const [editSubtitleStyle, setEditSubtitleStyle] = useState('hormozi');
+  const [editQualityPreset, setEditQualityPreset] = useState('high');
+  const [subtitleStyles, setSubtitleStyles] = useState(DEFAULT_SUBTITLE_STYLES);
   const [singleScheduleTime, setSingleScheduleTime] = useState('');
   const [renderingClipId, setRenderingClipId] = useState(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [privacyStatus, setPrivacyStatus] = useState('public');
 
+  // YouTube Discovery State
+  const [discoverQuery, setDiscoverQuery] = useState('millionaire mindset discipline success habits speech interview');
+  const [discoverMinMinutes, setDiscoverMinMinutes] = useState(5);
+  const [discoverSortBy, setDiscoverSortBy] = useState('clip_potential');
+  const [discoverPresets, setDiscoverPresets] = useState([
+    { id: 'millionaire_mindset', name: '💰 Motivation & Millionaire Mindset', query: 'millionaire mindset discipline success habits speech interview' },
+    { id: 'podcast_clips', name: '🎙️ Podcast Clips', query: 'podcast full episode best moments interview life advice' },
+    { id: 'luxury_lifestyle', name: '💎 Luxury & Rich Lifestyle', query: 'billionaire luxury lifestyle supercars mansion tour wealth secrets' },
+    { id: 'mystery_crime', name: '🕵️ Mystery & True Crime', query: 'unsolved mystery true crime documentary story explained' },
+    { id: 'ai_future', name: '🤖 AI & Future Technology', query: 'AI future technology breakthrough explained podcast' },
+    { id: 'psychology', name: '🧠 Psychology & Human Behaviour', query: 'human psychology dark psychology behaviour facts lecture' },
+    { id: 'gta6_gaming', name: '🎮 GTA 6 & Gaming Hype', query: 'GTA 6 trailer breakdown hidden details gameplay secrets' },
+  ]);
+  const [discoverResults, setDiscoverResults] = useState([]);
+  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [discoverStats, setDiscoverStats] = useState(null);
+
   useEffect(() => {
     fetchAnalytics();
     fetchVideos();
     fetchYouTubeUploads();
+    fetchSubtitleStyles();
+    fetchDiscoverPresets();
   }, []);
+
+  const fetchDiscoverPresets = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/youtube/discover/presets`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.presets && data.presets.length > 0) {
+          setDiscoverPresets(data.presets);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load discovery presets:', err);
+    }
+  };
+
+  const handleRunDiscovery = async (overrideQuery = null) => {
+    const q = (overrideQuery !== null ? overrideQuery : discoverQuery).trim();
+    if (!q) return;
+    if (overrideQuery !== null) setDiscoverQuery(overrideQuery);
+    setIsDiscovering(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/youtube/discover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: q,
+          min_duration_minutes: parseInt(discoverMinMinutes) || 5,
+          max_duration_minutes: 150,
+          max_results: 12,
+          sort_by: discoverSortBy
+        })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Discovery search failed');
+      }
+      const data = await res.json();
+      setDiscoverResults(data.videos || []);
+      setDiscoverStats({ total_scanned: data.total_scanned, qualified_count: data.qualified_count });
+    } catch (err) {
+      alert(`Discovery error: ${err.message}`);
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
+
+  const handleDiscoverImportAndClip = async (videoItem, autoStart = true) => {
+    setYoutubeUrl(videoItem.url);
+    setYoutubeResolution('1080p');
+    setUploadMode('youtube');
+    setActiveTab('upload');
+
+    if (!autoStart) {
+      setIsInspecting(true);
+      setYoutubeMetadata(null);
+      try {
+        const res = await fetch(`${API_BASE}/api/videos/youtube-inspect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: videoItem.url })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setYoutubeMetadata(data);
+          if (data.available_resolutions?.length > 0) {
+            setYoutubeResolution(data.available_resolutions.includes('1080p') ? '1080p' : data.available_resolutions[0]);
+          }
+        }
+      } finally {
+        setIsInspecting(false);
+      }
+      return;
+    }
+
+    // Auto-start 1080p download & AI story extraction
+    setIsProcessing(true);
+    setUploadProgress(15);
+    const initialStatus = `Downloading 1080p "${videoItem.title.slice(0, 45)}..." for AI clipping...`;
+    setProcessingStatus(initialStatus);
+    setActiveJob({
+      type: 'youtube',
+      title: videoItem.title,
+      percent: 15,
+      stepIndex: 1,
+      statusText: initialStatus
+    });
+
+    try {
+      const res = await fetch(`${API_BASE}/api/videos/youtube-download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: videoItem.url, resolution: '1080p' })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'YouTube download failed');
+      }
+      const data = await res.json();
+      setUploadProgress(35);
+      setProcessingStatus('Downloaded! Starting Whisper AI transcription...');
+      setActiveJob(prev => prev ? { ...prev, percent: 35, stepIndex: 2, statusText: 'Downloaded! Starting Whisper AI transcription...' } : null);
+      startPipelinePolling(data.video.id, videoItem.title);
+    } catch (err) {
+      setIsProcessing(false);
+      setActiveJob(null);
+      alert(`Auto-Import failed: ${err.message}`);
+    }
+  };
+
+  const fetchSubtitleStyles = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/subtitle-styles`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.styles && data.styles.length > 0) {
+          setSubtitleStyles(data.styles);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load subtitle styles:', err);
+    }
+  };
 
   const fetchAnalytics = async () => {
     try {
@@ -164,6 +325,9 @@ export default function App() {
     setEditTitle(clip.title || '');
     setEditDescription(clip.description || '');
     setEditLayout(clip.layout_mode || 'auto');
+    if (clip.subtitle_style) {
+      setEditSubtitleStyle(clip.subtitle_style);
+    }
   };
 
   // Checkbox selection helpers
@@ -181,67 +345,163 @@ export default function App() {
     setSelectedClipIds([]);
   };
 
-  // Video Upload Handler
-  const handleUploadSubmit = async (e) => {
+  // Polling helper with rich live status updates
+  const startPipelinePolling = (videoId, videoTitle) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const stRes = await fetch(`${API_BASE}/api/videos/${videoId}/status`);
+        if (stRes.ok) {
+          const stData = await stRes.json();
+          if (stData.status === 'extracting_metadata' || stData.status === 'extracting_audio') {
+            const statusMsg = `Extracting 16kHz audio track for Faster-Whisper AI speech analysis...`;
+            setProcessingStatus(statusMsg);
+            setUploadProgress(45);
+            setActiveJob(prev => prev ? {
+              ...prev,
+              percent: 45,
+              stepIndex: 2,
+              statusText: statusMsg
+            } : null);
+          } else if (stData.status === 'transcribing') {
+            const statusMsg = `Transcribing speech with Faster-Whisper CPU INT8 (word timestamps)...`;
+            setProcessingStatus(statusMsg);
+            setUploadProgress(65);
+            setActiveJob(prev => prev ? {
+              ...prev,
+              percent: 65,
+              stepIndex: 3,
+              statusText: statusMsg
+            } : null);
+          } else if (stData.status === 'detecting_clips') {
+            const statusMsg = `Analyzing 6 viral dimensions & segmenting distinct narrative moments...`;
+            setProcessingStatus(statusMsg);
+            setUploadProgress(85);
+            setActiveJob(prev => prev ? {
+              ...prev,
+              percent: 85,
+              stepIndex: 4,
+              statusText: statusMsg
+            } : null);
+          } else if (stData.status === 'completed') {
+            clearInterval(pollInterval);
+            const statusMsg = `Completed! Distinct viral moments ready.`;
+            setProcessingStatus(statusMsg);
+            setUploadProgress(100);
+            setActiveJob(prev => prev ? {
+              ...prev,
+              percent: 100,
+              stepIndex: 4,
+              statusText: statusMsg
+            } : null);
+
+            setTimeout(() => {
+              setIsProcessing(false);
+              setActiveJob(null);
+            }, 3000);
+
+            await fetchVideos();
+            await fetchAnalytics();
+            setSelectedVideo(stData);
+            await loadClipsForVideo(videoId);
+            setActiveTab('clips');
+          } else if (stData.status === 'failed') {
+            clearInterval(pollInterval);
+            setIsProcessing(false);
+            setActiveJob(null);
+            alert(`Processing failed: ${stData.error_message}`);
+          }
+        }
+      } catch (err) {
+        console.error('Poll error:', err);
+      }
+    }, 1500);
+  };
+
+  // Video Upload Handler with Real-Time Byte-Level Progress
+  const handleUploadSubmit = (e) => {
     e.preventDefault();
     if (!uploadFile) return;
 
+    const file = uploadFile;
+    const totalMB = (file.size / (1024 * 1024)).toFixed(1);
+
     setIsProcessing(true);
-    setUploadProgress(15);
-    setProcessingStatus('Uploading video to backend...');
+    setUploadProgress(0);
+    const initialStatus = `Uploading "${file.name}" (0% • 0.0 MB / ${totalMB} MB)...`;
+    setProcessingStatus(initialStatus);
+    setActiveJob({
+      type: 'source_upload',
+      title: file.name,
+      statusText: initialStatus,
+      percent: 0,
+      stepIndex: 1,
+      stepTotal: 4,
+      loadedMB: '0.0',
+      totalMB: totalMB
+    });
 
     const formData = new FormData();
-    formData.append('file', uploadFile);
+    formData.append('file', file);
 
-    try {
-      const res = await fetch(`${API_BASE}/api/videos/upload`, {
-        method: 'POST',
-        body: formData
-      });
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_BASE}/api/videos/upload`);
 
-      if (!res.ok) throw new Error('Upload failed');
-      const data = await res.json();
-      const videoId = data.video.id;
+    xhr.upload.onprogress = (evt) => {
+      if (evt.lengthComputable) {
+        const filePct = Math.round((evt.loaded / evt.total) * 100);
+        // Map upload phase to 0% - 35% of total pipeline progress
+        const overallProgress = Math.round(filePct * 0.35);
+        const loadedMB = (evt.loaded / (1024 * 1024)).toFixed(1);
 
-      setUploadProgress(35);
-      setProcessingStatus('Extracting audio & transcribing with Faster-Whisper INT8...');
+        setUploadProgress(overallProgress);
+        const statusMsg = `Uploading "${file.name}" (${filePct}% • ${loadedMB} MB / ${totalMB} MB)...`;
+        setProcessingStatus(statusMsg);
+        setActiveJob(prev => prev ? {
+          ...prev,
+          percent: overallProgress,
+          loadedMB: loadedMB,
+          totalMB: totalMB,
+          statusText: statusMsg
+        } : null);
+      }
+    };
 
-      const pollInterval = setInterval(async () => {
+    xhr.onload = async () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
         try {
-          const stRes = await fetch(`${API_BASE}/api/videos/${videoId}/status`);
-          if (stRes.ok) {
-            const stData = await stRes.json();
-            if (stData.status === 'transcribing') {
-              setProcessingStatus('Transcribing speech with word-level timestamps...');
-              setUploadProgress(60);
-            } else if (stData.status === 'detecting_clips') {
-              setProcessingStatus('Analyzing 6 viral dimensions & segmenting distinct moments...');
-              setUploadProgress(85);
-            } else if (stData.status === 'completed') {
-              clearInterval(pollInterval);
-              setProcessingStatus('Completed! Distinct viral moments ready.');
-              setUploadProgress(100);
-              setIsProcessing(false);
-              await fetchVideos();
-              await fetchAnalytics();
-              setSelectedVideo(stData);
-              await loadClipsForVideo(videoId);
-              setActiveTab('clips');
-            } else if (stData.status === 'failed') {
-              clearInterval(pollInterval);
-              setIsProcessing(false);
-              alert(`Processing failed: ${stData.error_message}`);
-            }
-          }
-        } catch (err) {
-          console.error('Poll error:', err);
-        }
-      }, 1500);
+          const data = JSON.parse(xhr.responseText);
+          const videoId = data.video.id;
 
-    } catch (err) {
+          setUploadProgress(35);
+          const nextMsg = `Upload complete! Extracting audio & preparing Faster-Whisper...`;
+          setProcessingStatus(nextMsg);
+          setActiveJob(prev => prev ? {
+            ...prev,
+            percent: 35,
+            stepIndex: 2,
+            statusText: nextMsg
+          } : null);
+
+          startPipelinePolling(videoId, file.name);
+        } catch (err) {
+          setIsProcessing(false);
+          setActiveJob(null);
+          alert('Failed to parse server response: ' + err.message);
+        }
+      } else {
+        setIsProcessing(false);
+        setActiveJob(null);
+        alert(`Upload failed (HTTP ${xhr.status}): ${xhr.responseText}`);
+      }
+    };
+
+    xhr.onerror = () => {
       setIsProcessing(false);
-      alert(err.message);
-    }
+      setActiveJob(null);
+      alert('Upload failed due to a network connection error.');
+    };
+
+    xhr.send(formData);
   };
 
   // YouTube Inspect Handler
@@ -275,9 +535,19 @@ export default function App() {
     e.preventDefault();
     if (!youtubeUrl.trim()) return;
 
+    const videoTitle = youtubeMetadata ? youtubeMetadata.title : 'YouTube Video';
     setIsProcessing(true);
     setUploadProgress(15);
-    setProcessingStatus(`Connecting & downloading YouTube video in ${youtubeResolution}...`);
+    const initialStatus = `Connecting & downloading YouTube video (${youtubeResolution}) for "${videoTitle}"...`;
+    setProcessingStatus(initialStatus);
+    setActiveJob({
+      type: 'youtube_download',
+      title: videoTitle,
+      statusText: initialStatus,
+      percent: 15,
+      stepIndex: 1,
+      stepTotal: 4
+    });
 
     try {
       const res = await fetch(`${API_BASE}/api/videos/youtube-download`, {
@@ -298,42 +568,20 @@ export default function App() {
       const videoId = data.video.id;
 
       setUploadProgress(35);
-      setProcessingStatus('Download complete! Extracting audio & preparing Faster-Whisper CPU INT8...');
+      const nextMsg = `Download complete! Extracting audio & preparing Faster-Whisper CPU INT8...`;
+      setProcessingStatus(nextMsg);
+      setActiveJob(prev => prev ? {
+        ...prev,
+        percent: 35,
+        stepIndex: 2,
+        statusText: nextMsg
+      } : null);
 
-      const pollInterval = setInterval(async () => {
-        try {
-          const stRes = await fetch(`${API_BASE}/api/videos/${videoId}/status`);
-          if (stRes.ok) {
-            const stData = await stRes.json();
-            if (stData.status === 'transcribing') {
-              setProcessingStatus('Transcribing speech with word-level timestamps...');
-              setUploadProgress(60);
-            } else if (stData.status === 'detecting_clips') {
-              setProcessingStatus('Analyzing 6 viral dimensions & segmenting distinct narrative moments...');
-              setUploadProgress(85);
-            } else if (stData.status === 'completed') {
-              clearInterval(pollInterval);
-              setProcessingStatus('Completed! Distinct viral moments ready.');
-              setUploadProgress(100);
-              setIsProcessing(false);
-              await fetchVideos();
-              await fetchAnalytics();
-              setSelectedVideo(stData);
-              await loadClipsForVideo(videoId);
-              setActiveTab('clips');
-            } else if (stData.status === 'failed') {
-              clearInterval(pollInterval);
-              setIsProcessing(false);
-              alert(`Processing failed: ${stData.error_message}`);
-            }
-          }
-        } catch (err) {
-          console.error('Poll error:', err);
-        }
-      }, 1500);
+      startPipelinePolling(videoId, videoTitle);
 
     } catch (err) {
       setIsProcessing(false);
+      setActiveJob(null);
       alert(`YouTube Download error: ${err.message}`);
     }
   };
@@ -342,11 +590,18 @@ export default function App() {
   const handleRenderShort = async (clipId, customLayout = null) => {
     setRenderingClipId(clipId);
     const layout = customLayout || editLayout;
+    const subStyle = editSubtitleStyle || 'hormozi';
+    const quality = editQualityPreset || 'high';
     try {
       const res = await fetch(`${API_BASE}/api/clips/${clipId}/render`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ layout_mode: layout, include_subtitles: true })
+        body: JSON.stringify({
+          layout_mode: layout,
+          include_subtitles: subStyle !== 'none',
+          subtitle_style: subStyle,
+          quality_preset: quality
+        })
       });
       if (!res.ok) throw new Error('Render failed');
       const data = await res.json();
@@ -355,7 +610,7 @@ export default function App() {
       selectClipForPreview(updated);
       setClips(prev => prev.map(c => c.id === clipId ? updated : c));
       fetchAnalytics();
-      alert(`Short rendered successfully in 9:16 format with burned-in subtitles!`);
+      alert(`Short rendered in 1080p Full HD (${quality.toUpperCase()}) with '${subStyle}' subtitles!`);
     } catch (err) {
       alert(`Render error: ${err.message}`);
     } finally {
@@ -435,6 +690,8 @@ export default function App() {
           privacy_status: privacyStatus,
           custom_start_time: customStartTime ? new Date(customStartTime).toISOString() : null,
           layout_mode: batchLayoutMode,
+          subtitle_style: batchSubtitleStyle,
+          quality_preset: batchQualityPreset,
           force_rerender: batchForceRerender
         })
       });
@@ -506,6 +763,14 @@ export default function App() {
           </div>
 
           <div
+            className={`nav-item ${activeTab === 'discover' ? 'active' : ''}`}
+            onClick={() => setActiveTab('discover')}
+          >
+            <Search size={18} />
+            <span>Discover Videos</span>
+          </div>
+
+          <div
             className={`nav-item ${activeTab === 'clips' ? 'active' : ''}`}
             onClick={() => setActiveTab('clips')}
           >
@@ -565,6 +830,13 @@ export default function App() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setActiveTab('discover')}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, borderColor: 'rgba(139, 92, 246, 0.45)', color: '#c4b5fd' }}
+                  >
+                    <Search size={14} /> Discover Best Videos
+                  </button>
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => { setUploadMode('youtube'); setActiveTab('upload'); }}
@@ -768,6 +1040,248 @@ export default function App() {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB: YOUTUBE BEST VIDEO DISCOVERY ALGORITHM */}
+          {activeTab === 'discover' && (
+            <div>
+              <div className="page-header">
+                <div>
+                  <h1 className="page-title">🔍 Discover Best YouTube Videos to Clip</h1>
+                  <p className="page-subtitle">
+                    Smart 5-dimension ranking algorithm scans YouTube to find high-retention, spoken-word long-form videos ideal for viral 1080p Shorts.
+                  </p>
+                </div>
+              </div>
+
+              {/* Search & Filter Panel */}
+              <div className="dashboard-panel" style={{ marginBottom: 24 }}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 16 }}>
+                  <div style={{ flex: '1 1 360px' }}>
+                    <label style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                      Topic, Niche, Guest, or Podcast Keyword
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. podcast mindset discipline, AI explained, entrepreneur interview..."
+                      value={discoverQuery}
+                      onChange={(e) => setDiscoverQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleRunDiscovery()}
+                    />
+                  </div>
+
+                  <div style={{ width: 170 }}>
+                    <label style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                      Min Video Length
+                    </label>
+                    <select
+                      className="form-control"
+                      value={discoverMinMinutes}
+                      onChange={(e) => setDiscoverMinMinutes(Number(e.target.value))}
+                    >
+                      <option value={5}>5+ minutes</option>
+                      <option value={10}>10+ minutes (Recommended)</option>
+                      <option value={20}>20+ minutes (Podcasts)</option>
+                      <option value={30}>30+ minutes (Deep-Dive)</option>
+                    </select>
+                  </div>
+
+                  <div style={{ width: 195 }}>
+                    <label style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                      Rank Videos By
+                    </label>
+                    <select
+                      className="form-control"
+                      value={discoverSortBy}
+                      onChange={(e) => setDiscoverSortBy(e.target.value)}
+                    >
+                      <option value="clip_potential">🔥 Best Clip Potential</option>
+                      <option value="max_views">👀 Highest Views (Viral Hype)</option>
+                    </select>
+                  </div>
+
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => handleRunDiscovery()}
+                    disabled={isDiscovering}
+                    style={{ height: 42, display: 'flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <Search size={16} />
+                    {isDiscovering ? 'Scanning & Ranking...' : 'Find Best Videos'}
+                  </button>
+                </div>
+
+                {/* Preset Niche Chips */}
+                <div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                    ⚡ Quick Viral Niches (1-Click Search):
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {discoverPresets.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        className={`btn-chip ${discoverQuery === preset.query ? 'selected' : ''}`}
+                        onClick={() => handleRunDiscovery(preset.query)}
+                        disabled={isDiscovering}
+                        title={preset.description}
+                      >
+                        {preset.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Discovery Results Summary */}
+              {discoverStats && (
+                <div style={{ marginBottom: 16, fontSize: 13, color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>
+                    Scanned <strong>{discoverStats.total_scanned}</strong> YouTube videos • Filtered out Shorts/music • Ranked top <strong>{discoverResults.length}</strong> clippable long-form matches
+                  </span>
+                </div>
+              )}
+
+              {/* Results Grid */}
+              {isDiscovering ? (
+                <div className="dashboard-panel" style={{ textAlign: 'center', padding: 48 }}>
+                  <RefreshCw size={32} className="spin" style={{ margin: '0 auto 14px', color: '#3b82f6' }} />
+                  <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Running Clip-Potential Algorithm...</h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                    Evaluating duration, audience reach, spoken-word density, and viral hook signals.
+                  </p>
+                </div>
+              ) : discoverResults.length === 0 ? (
+                <div className="dashboard-panel" style={{ textAlign: 'center', padding: 48 }}>
+                  <TrendingUp size={36} style={{ margin: '0 auto 12px', color: '#8b5cf6' }} />
+                  <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Find Your Next Viral Source Video</h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: 13, maxWidth: 520, margin: '0 auto 18px' }}>
+                    Choose a preset niche above or type any topic and click <strong>Find Best Videos</strong>. Our algorithm scores YouTube videos from 0–100 based on clip yield and viral potential.
+                  </p>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => handleRunDiscovery()}
+                  >
+                    <Zap size={16} /> Scan Top Podcast & Mindset Videos Now
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 18 }}>
+                  {discoverResults.map((vid, idx) => {
+                    const mins = Math.floor(vid.duration / 60);
+                    const secs = vid.duration % 60;
+                    const durStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+                    const viewsStr = vid.view_count >= 1000000
+                      ? `${(vid.view_count / 1000000).toFixed(1)}M views`
+                      : vid.view_count >= 1000
+                      ? `${(vid.view_count / 1000).toFixed(1)}K views`
+                      : `${vid.view_count} views`;
+
+                    return (
+                      <div
+                        key={vid.id}
+                        className="dashboard-panel"
+                        style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+                      >
+                        <div>
+                          {/* Thumbnail + Badges */}
+                          <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#09090b' }}>
+                            <img
+                              src={vid.thumbnail}
+                              alt={vid.title}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                            <div style={{
+                              position: 'absolute',
+                              top: 10,
+                              left: 10,
+                              background: idx < 3 ? 'linear-gradient(135deg, #f59e0b, #ef4444)' : 'rgba(15, 23, 42, 0.88)',
+                              color: '#fff',
+                              padding: '4px 10px',
+                              borderRadius: 20,
+                              fontSize: 12,
+                              fontWeight: 800,
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
+                            }}>
+                              {idx === 0 ? '🏆 ' : '🔥 '}Score: {vid.clip_potential_score}/100
+                            </div>
+                            <div style={{
+                              position: 'absolute',
+                              bottom: 8,
+                              right: 8,
+                              background: 'rgba(0,0,0,0.82)',
+                              color: '#fff',
+                              padding: '3px 7px',
+                              borderRadius: 6,
+                              fontSize: 11,
+                              fontWeight: 700
+                            }}>
+                              {durStr}
+                            </div>
+                          </div>
+
+                          <div style={{ padding: 16 }}>
+                            <h3 style={{
+                              fontSize: 14,
+                              fontWeight: 700,
+                              lineHeight: 1.35,
+                              marginBottom: 6,
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden'
+                            }}>
+                              {vid.title}
+                            </h3>
+                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10 }}>
+                              {vid.channel} • {viewsStr} • <strong style={{ color: '#34d399' }}>~{vid.estimated_clips} Shorts</strong>
+                            </div>
+
+                            {/* Reason Chips */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                              {vid.reasons.map((r, rIdx) => (
+                                <span
+                                  key={rIdx}
+                                  style={{
+                                    fontSize: 11,
+                                    padding: '3px 8px',
+                                    borderRadius: 6,
+                                    background: 'rgba(59, 130, 246, 0.14)',
+                                    color: '#93c5fd',
+                                    border: '1px solid rgba(59, 130, 246, 0.25)'
+                                  }}
+                                >
+                                  {r}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ padding: '0 16px 16px', display: 'flex', gap: 8 }}>
+                          <button
+                            className="btn btn-primary btn-sm"
+                            style={{ flex: 1, justifyContent: 'center' }}
+                            onClick={() => handleDiscoverImportAndClip(vid, true)}
+                            disabled={isProcessing}
+                          >
+                            <Zap size={14} /> Import & Auto-Clip
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => handleDiscoverImportAndClip(vid, false)}
+                            title="Open in YouTube Downloader to inspect resolutions"
+                          >
+                            <Link2 size={14} /> Inspect
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -1235,7 +1749,7 @@ export default function App() {
                         />
                       </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                         <div className="form-group">
                           <label>Vertical 9:16 Layout</label>
                           <select
@@ -1243,9 +1757,24 @@ export default function App() {
                             value={editLayout}
                             onChange={(e) => setEditLayout(e.target.value)}
                           >
-                            <option value="auto">⚡ Auto-Detect (Best for Whiteboards & Charts)</option>
-                            <option value="blur_background">🌟 Blurred Background (Fit & Center 9:16)</option>
-                            <option value="smart_crop">🎯 Smart Crop (Speaker Centered 9:16)</option>
+                            <option value="auto">⚡ Auto-Detect</option>
+                            <option value="blur_background">🌟 Blurred Background</option>
+                            <option value="smart_crop">🎯 Smart Crop</option>
+                          </select>
+                        </div>
+
+                        <div className="form-group">
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Film size={13} color="#60a5fa" /> Video Quality
+                          </label>
+                          <select
+                            className="form-control"
+                            value={editQualityPreset}
+                            onChange={(e) => setEditQualityPreset(e.target.value)}
+                          >
+                            <option value="high">🎬 1080p Full HD (High)</option>
+                            <option value="ultra">💎 1080p Ultra Crisp (Studio)</option>
+                            <option value="balanced">⚡ 1080p Balanced (Fast)</option>
                           </select>
                         </div>
 
@@ -1257,9 +1786,88 @@ export default function App() {
                             onChange={(e) => setPrivacyStatus(e.target.value)}
                           >
                             <option value="public">Public</option>
-                            <option value="unlisted">Unlisted (Verify First)</option>
+                            <option value="unlisted">Unlisted</option>
                             <option value="private">Private</option>
                           </select>
+                        </div>
+                      </div>
+
+                      {/* Popular Subtitle Styles Picker */}
+                      <div className="form-group">
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                          <Type size={14} color="#f59e0b" /> Popular Creator Subtitle Style
+                        </label>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+                          {subtitleStyles.map((st) => {
+                            const isSelected = editSubtitleStyle === st.id;
+                            return (
+                              <button
+                                key={st.id}
+                                type="button"
+                                onClick={() => setEditSubtitleStyle(st.id)}
+                                title={st.description}
+                                style={{
+                                  background: isSelected ? 'rgba(59, 130, 246, 0.16)' : 'var(--bg-secondary)',
+                                  border: isSelected ? '1.5px solid #3b82f6' : '1px solid var(--border-color)',
+                                  borderRadius: 10,
+                                  padding: '8px 10px',
+                                  textAlign: 'left',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <div style={{
+                                  background: st.preview_bg,
+                                  borderRadius: 6,
+                                  padding: '4px 8px',
+                                  marginBottom: 6,
+                                  textAlign: 'center',
+                                  fontWeight: 800,
+                                  fontSize: 11,
+                                  letterSpacing: '0.4px',
+                                  color: st.preview_text,
+                                  border: '1px solid rgba(255,255,255,0.08)'
+                                }}>
+                                  {st.uppercase ? 'WAIT ' : 'Wait '}
+                                  <span style={{ color: st.preview_accent }}>
+                                    {st.uppercase ? 'THIS!' : 'this!'}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: isSelected ? '#93c5fd' : '#f0f3fa' }}>
+                                  {st.name}
+                                </div>
+                              </button>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            onClick={() => setEditSubtitleStyle('none')}
+                            style={{
+                              background: editSubtitleStyle === 'none' ? 'rgba(239, 68, 68, 0.14)' : 'var(--bg-secondary)',
+                              border: editSubtitleStyle === 'none' ? '1.5px solid #ef4444' : '1px solid var(--border-color)',
+                              borderRadius: 10,
+                              padding: '8px 10px',
+                              textAlign: 'left',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <div style={{
+                              background: '#09090b',
+                              borderRadius: 6,
+                              padding: '4px 8px',
+                              marginBottom: 6,
+                              textAlign: 'center',
+                              fontWeight: 600,
+                              fontSize: 11,
+                              color: '#71717a',
+                              border: '1px solid rgba(255,255,255,0.08)'
+                            }}>
+                              (Clean Video)
+                            </div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: editSubtitleStyle === 'none' ? '#fca5a5' : 'var(--text-secondary)' }}>
+                              No Subtitles
+                            </div>
+                          </button>
                         </div>
                       </div>
 
@@ -1426,25 +2034,59 @@ export default function App() {
               </button>
             </div>
 
-            {/* NEW: Crop / Vertical 9:16 Framing Layout Setting in Schedule Section */}
+            {/* NEW: Crop / Vertical 9:16 Framing, Subtitle Style & 1080p Quality in Schedule Section */}
             <div className="form-group" style={{ marginBottom: 16, background: 'var(--bg-secondary)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border-color)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                 <Layers size={16} color="#3b82f6" />
                 <label style={{ margin: 0, fontWeight: 700, color: '#f0f3fa' }}>
-                  Vertical 9:16 Crop & Framing Layout
+                  1080p Framing Layout & Popular Subtitle Style
                 </label>
               </div>
               <select
                 className="form-control"
                 value={batchLayoutMode}
                 onChange={(e) => setBatchLayoutMode(e.target.value)}
+                style={{ marginBottom: 10 }}
               >
                 <option value="auto">⚡ Auto-Detect (Best: Keeps full Whiteboards & Charts visible with fit)</option>
                 <option value="blur_background">🌟 Blurred Background (Fit & Center full 16:9 with ambient glow)</option>
                 <option value="smart_crop">🎯 Smart Crop (Center-fill speaker in 9:16 vertical)</option>
               </select>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4, display: 'block' }}>
+                    Subtitle Style
+                  </label>
+                  <select
+                    className="form-control"
+                    value={batchSubtitleStyle}
+                    onChange={(e) => setBatchSubtitleStyle(e.target.value)}
+                  >
+                    {subtitleStyles.map((st) => (
+                      <option key={st.id} value={st.id}>{st.name}</option>
+                    ))}
+                    <option value="none">No Subtitles</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4, display: 'block' }}>
+                    Export Video Quality
+                  </label>
+                  <select
+                    className="form-control"
+                    value={batchQualityPreset}
+                    onChange={(e) => setBatchQualityPreset(e.target.value)}
+                  >
+                    <option value="high">🎬 1080p Full HD (High)</option>
+                    <option value="ultra">💎 1080p Ultra Crisp</option>
+                    <option value="balanced">⚡ 1080p Balanced (Fast)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
                 <input
                   type="checkbox"
                   id="batch-rerender-check"
@@ -1453,7 +2095,7 @@ export default function App() {
                   onChange={(e) => setBatchForceRerender(e.target.checked)}
                 />
                 <label htmlFor="batch-rerender-check" style={{ fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                  Re-render clips with this layout before publishing (ensures uniform layout across all selected)
+                  Re-render selected clips in 1080p HD with this layout & subtitle style before publishing
                 </label>
               </div>
             </div>
