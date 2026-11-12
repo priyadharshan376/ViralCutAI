@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import logging
 from typing import Optional, List, Dict, Any
@@ -501,7 +502,9 @@ def upload_clip_to_youtube_endpoint(clip_id: str, req: YouTubeUploadRequest = Yo
             detail="Cannot publish: Short has not been rendered yet. Please render the clip first."
         )
 
-    title = req.custom_title or clip["title"] or "Viral Short by ViralCut AI"
+    raw_title = req.custom_title or clip.get("title") or "High Impact Highlight"
+    title = re.sub(r'#shorts?\b', '', raw_title, flags=re.IGNORECASE).strip()
+    title = re.sub(r'\s{2,}', ' ', title).strip()
     description = req.custom_description or clip.get("description")
     if not description or description == f"{title}\n\n#Shorts #Viral" or len(description.strip()) < 30:
         video = get_video(clip["video_id"]) or {}
@@ -629,7 +632,9 @@ def batch_upload_clips_to_youtube_endpoint(req: BatchYouTubeUploadRequest):
             publish_at_str = scheduled_time.strftime("%Y-%m-%dT%H:%M:%SZ")
             clip_privacy = "private"  # YouTube requires private for scheduled videos
 
-        title = clip.get("title") or "Mindset & Habit Trick #Shorts"
+        raw_title = clip.get("title") or "High Impact Highlight"
+        title = re.sub(r'#shorts?\b', '', raw_title, flags=re.IGNORECASE).strip()
+        title = re.sub(r'\s{2,}', ' ', title).strip()
         description = clip.get("description")
         if not description or description == f"{title}\n\n#Shorts #PDX" or len(description.strip()) < 30:
             video = get_video(clip["video_id"]) or {}

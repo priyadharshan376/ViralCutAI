@@ -6,25 +6,25 @@ KNOWN_ENTITIES: List[Dict[str, Any]] = [
     # Tech / Founders / Visionaries
     {
         "name": "Elon Musk",
-        "aliases": ["elon musk", "elon", "musk", "spacex", "tesla", "xai", "neuralink"],
-        "hashtags": ["#ElonMusk", "#Tesla", "#SpaceX", "#xAI"],
-        "tags": ["Elon Musk", "Elon Musk interview", "Tesla", "SpaceX", "xAI", "Elon Musk advice"],
+        "aliases": ["elon musk", "elon", "musk", "spacex", "tesla", "neuralink", "starship", "xai"],
+        "hashtags": ["#ElonMusk", "#Tesla", "#SpaceX"],
+        "tags": ["Elon Musk", "Elon Musk interview", "Tesla", "SpaceX", "Elon Musk advice"],
         "category": "Science & Technology",
         "role": "Tech Visionary & Founder"
     },
     {
         "name": "Sam Altman",
-        "aliases": ["sam altman", "altman", "openai", "chatgpt", "gpt-4", "gpt-5"],
-        "hashtags": ["#SamAltman", "#OpenAI", "#ChatGPT", "#ArtificialIntelligence"],
-        "tags": ["Sam Altman", "OpenAI", "ChatGPT", "Sam Altman interview", "AGI"],
+        "aliases": ["sam altman", "altman", "openai", "chatgpt"],
+        "hashtags": ["#SamAltman", "#OpenAI", "#ChatGPT"],
+        "tags": ["Sam Altman", "OpenAI", "ChatGPT", "Sam Altman interview"],
         "category": "Science & Technology",
         "role": "CEO of OpenAI"
     },
     {
         "name": "Jensen Huang",
         "aliases": ["jensen huang", "jensen", "nvidia"],
-        "hashtags": ["#JensenHuang", "#Nvidia", "#AIHardware"],
-        "tags": ["Jensen Huang", "Nvidia", "AI chips", "Nvidia CEO"],
+        "hashtags": ["#JensenHuang", "#Nvidia"],
+        "tags": ["Jensen Huang", "Nvidia", "Nvidia CEO"],
         "category": "Science & Technology",
         "role": "CEO of Nvidia"
     },
@@ -157,15 +157,15 @@ KNOWN_ENTITIES: List[Dict[str, Any]] = [
     {
         "name": "Grand Theft Auto VI",
         "aliases": ["gta 6", "gta6", "gta vi", "vice city", "jason and lucia", "grand theft auto vi"],
-        "hashtags": ["#GTA6", "#GTAVI", "#RockstarGames", "#ViceCity", "#GamingShorts", "#GTA6Leaks"],
+        "hashtags": ["#GTA6", "#GTAVI", "#RockstarGames", "#ViceCity", "#GTA6Gameplay"],
         "tags": ["GTA 6", "GTA VI", "GTA 6 gameplay", "GTA 6 trailer", "Vice City", "Rockstar Games", "Jason and Lucia"],
         "category": "Gaming",
-        "role": "Rockstar Games' Next-Gen Open World"
+        "role": "Rockstar Games Open World"
     },
     {
         "name": "Rockstar Games",
         "aliases": ["rockstar games", "rockstar", "rdr2", "red dead"],
-        "hashtags": ["#RockstarGames", "#GTA", "#Gaming"],
+        "hashtags": ["#RockstarGames", "#GTA", "#GamingDetails"],
         "tags": ["Rockstar Games", "GTA", "Red Dead Redemption", "gaming news"],
         "category": "Gaming",
         "role": "Video Game Developer & Publisher"
@@ -175,7 +175,7 @@ KNOWN_ENTITIES: List[Dict[str, Any]] = [
     {
         "name": "MrBeast",
         "aliases": ["mrbeast", "mr beast", "jimmy donaldson"],
-        "hashtags": ["#MrBeast", "#ViralShorts"],
+        "hashtags": ["#MrBeast", "#ViralMoments"],
         "tags": ["MrBeast", "MrBeast shorts", "Jimmy Donaldson", "viral entertainment"],
         "category": "Entertainment",
         "role": "Content Creator & Philanthropist"
@@ -198,22 +198,67 @@ KNOWN_ENTITIES: List[Dict[str, Any]] = [
     },
 ]
 
+# Topic & Keyword Rules to extract tags describing WHAT IS IN THE VIDEO
+TOPIC_TAG_RULES: List[tuple] = [
+    # Mindset / Performance / Habits
+    (["morning routine", "wake up early", "morning habit", "5 am"], ["#MorningRoutine", "#DailyHabits"]),
+    (["dopamine", "addiction", "reset", "detox"], ["#DopamineDetox", "#FocusHacks"]),
+    (["sleep", "circadian", "melatonin", "rest", "recovery"], ["#SleepOptimization", "#DeepSleep"]),
+    (["discipline", "self discipline", "lazy", "procrastination"], ["#SelfDiscipline", "#Discipline"]),
+    (["mental toughness", "hard things", "suffer", "pain", "push through", "endure"], ["#MentalToughness", "#StayHard"]),
+    (["focus", "attention", "distraction", "deep work", "concentrate"], ["#DeepWork", "#FocusHacks"]),
+    (["habit", "atomic habit", "routine", "behavior", "consistency"], ["#HabitBuilding", "#SuccessHabits"]),
+    (["body language", "manipulation", "dark psychology", "eye contact"], ["#BodyLanguage", "#DarkPsychology"]),
+    (["stoic", "stoicism", "marcus aurelius", "seneca"], ["#Stoicism", "#StoicWisdom"]),
+    (["confidence", "self esteem", "charisma"], ["#Charisma", "#ConfidenceBoost"]),
+
+    # Wealth / Business / Money
+    (["sales", "closing", "cold call", "negotiation"], ["#SalesTips", "#NegotiationSkills"]),
+    (["investing", "stocks", "real estate", "passive income"], ["#Investing", "#WealthBuilding"]),
+    (["money", "cash flow", "net worth", "millionaire", "billionaire", "wealth"], ["#MoneyMindset", "#FinancialFreedom"]),
+    (["startup", "business", "founder", "entrepreneur", "scale"], ["#Entrepreneurship", "#BusinessGrowth"]),
+    (["pricing", "high ticket", "offer", "acquisition", "marketing"], ["#BusinessStrategy", "#HighTicket"]),
+
+    # Gaming & GTA 6
+    (["water physics", "physics", "engine"], ["#WaterPhysics", "#GameEngine"]),
+    (["crowd density", "graphics", "npc", "pedestrian"], ["#CrowdDensity", "#NextGenGraphics"]),
+    (["open world", "map", "vice city", "leonida"], ["#ViceCityMap", "#OpenWorldGames"]),
+    (["gameplay", "walkthrough", "secrets", "easter egg"], ["#GameplayHighlights", "#GamingSecrets"]),
+
+    # Luxury & Lifestyle
+    (["supercar", "bugatti", "ferrari", "lamborghini", "hypercar"], ["#Supercars", "#ExoticCars"]),
+    (["mansion", "penthouse", "villa", "real estate"], ["#LuxuryMansion", "#MegaMansion"]),
+    (["private jet", "yacht", "rolex", "luxury"], ["#LuxuryLifestyle", "#BillionaireLife"]),
+
+    # Mystery & Crime
+    (["unsolved", "mystery", "fbi", "cold case", "crime"], ["#UnsolvedMysteries", "#ColdCase"]),
+    (["detective", "investigation", "suspect", "disappeared", "murder"], ["#CrimeDocumentary", "#MysteryStories"]),
+
+    # Science & Tech (specific to content)
+    (["space", "rocket", "mars", "starship", "spacex", "orbit"], ["#SpaceX", "#SpaceExploration", "#RocketScience"]),
+    (["electric car", "battery", "ev", "cybertruck", "tesla"], ["#Tesla", "#ElectricVehicles"]),
+    (["coding", "software", "developer", "algorithm"], ["#SoftwareEngineering", "#Coding"]),
+    (["chip", "semiconductor", "gpu", "hardware"], ["#Hardware", "#NvidiaGPU"]),
+    # Artificial Intelligence ONLY if explicitly mentioned in the text
+    (["artificial intelligence", "chatgpt", "openai", "agi", "machine learning", "large language model"], ["#ArtificialIntelligence", "#ChatGPT", "#OpenAI"])
+]
+
 NICHE_PROFILES: Dict[str, Dict[str, Any]] = {
     "gta6": {
         "keywords": ["gta 6", "gta6", "gta vi", "vice city", "rockstar", "jason", "lucia", "grand theft auto"],
-        "hashtags": ["#Shorts", "#GTA6", "#GTAVI", "#RockstarGames", "#GamingShorts", "#Gameplay", "#ViralShorts", "#PDX"],
+        "hashtags": ["#Shorts", "#GTA6", "#GTAVI", "#RockstarGames", "#ViceCity", "#Gameplay", "#ViralShorts", "#PDX"],
         "tags": ["GTA 6", "GTA VI", "GTA 6 gameplay", "GTA 6 trailer", "Rockstar Games", "Vice City", "gaming shorts", "viral gaming", "PS5", "open world", "PDX"],
         "emoji": "🎮🔥",
         "fallback_title": "Insane GTA 6 Detail You Missed!",
         "topic_label": "Grand Theft Auto VI Breakdown & Secrets",
         "engagement_q": "💬 What feature or location are you most hyped for in GTA 6? Drop your thoughts below!",
-        "niche_line": "🎮 Daily GTA 6 leaks, gameplay highlights, and viral gaming Shorts.",
+        "niche_line": "🎮 Daily GTA 6 leaks, gameplay highlights, and gaming breakdowns.",
         "category": "Gaming",
     },
     "gaming": {
         "keywords": ["gameplay", "gaming", "ps5", "xbox", "pc gaming", "fps", "clutch", "boss", "walkthrough", "mod", "mods", "gamer", "esports", "minecraft", "fortnite", "valorant", "call of duty"],
-        "hashtags": ["#Shorts", "#Gaming", "#GamingShorts", "#Gameplay", "#Gamer", "#ViralGaming", "#ViralShorts", "#PDX"],
-        "tags": ["gaming", "gaming shorts", "gameplay", "viral gaming", "insane gameplay", "funny gaming moments", "gamer", "PDX", "youtube shorts"],
+        "hashtags": ["#Shorts", "#Gaming", "#Gameplay", "#Gamer", "#ViralGaming", "#ViralShorts", "#PDX"],
+        "tags": ["gaming", "gameplay", "viral gaming", "insane gameplay", "funny gaming moments", "gamer", "PDX", "youtube shorts"],
         "emoji": "🕹️⚡",
         "fallback_title": "Insane Gameplay Moment!",
         "topic_label": "High-Intensity Gameplay & Gaming Highlights",
@@ -243,15 +288,15 @@ NICHE_PROFILES: Dict[str, Dict[str, Any]] = {
         "niche_line": "💎 Daily luxury lifestyle, billionaire wealth, and dream setups.",
         "category": "Entertainment",
     },
-    "tech_ai": {
-        "keywords": ["ai", "artificial intelligence", "chatgpt", "openai", "robot", "coding", "software", "tech", "future", "algorithm", "nvidia", "apple", "agi", "llm"],
-        "hashtags": ["#Shorts", "#AI", "#Tech", "#ArtificialIntelligence", "#FutureTech", "#TechShorts", "#ViralShorts", "#PDX"],
-        "tags": ["AI", "artificial intelligence", "tech news", "future technology", "coding", "tech shorts", "viral tech", "PDX"],
-        "emoji": "🤖⚡",
-        "fallback_title": "This AI Tech Changes Everything!",
-        "topic_label": "AI Breakthroughs & Future Technology",
-        "engagement_q": "💬 Do you think AI is advancing faster than humanity is ready for? Share your perspective!",
-        "niche_line": "🤖 Daily AI breakthroughs, tech insights, and future trends.",
+    "tech": {
+        "keywords": ["tech", "technology", "hardware", "software", "chips", "breakthrough", "coding", "future", "algorithm", "nvidia", "apple", "engineering", "gadgets"],
+        "hashtags": ["#Shorts", "#Tech", "#FutureTech", "#TechNews", "#Innovation", "#ViralShorts", "#PDX"],
+        "tags": ["tech", "technology", "tech news", "future technology", "coding", "innovation", "PDX"],
+        "emoji": "⚡💻",
+        "fallback_title": "This Tech Breakthrough Changes Everything!",
+        "topic_label": "Technology & Modern Innovation",
+        "engagement_q": "💬 What do you think is the most exciting technology being built right now? Share your perspective!",
+        "niche_line": "⚡ Daily tech breakthroughs, modern innovation, and future trends.",
         "category": "Science & Technology",
     },
     "business": {
@@ -292,7 +337,7 @@ GENERAL_VIRAL_PROFILE: Dict[str, Any] = {
 
 def detect_niche_profile(combined_text: str) -> Dict[str, Any]:
     text_lower = combined_text.lower()
-    for key in ["gta6", "mystery_crime", "luxury", "gaming", "tech_ai", "business", "mindset"]:
+    for key in ["gta6", "mystery_crime", "luxury", "gaming", "tech", "business", "mindset"]:
         profile = NICHE_PROFILES[key]
         if any(kw in text_lower for kw in profile["keywords"]):
             return profile
@@ -322,7 +367,6 @@ def extract_video_entities(
 
     # Regex heuristic for titles like "X Interview" or "X on Y Podcast"
     if source_title:
-        # Pattern: Guest Name on / with / feat
         patterns = [
             r'(?:interview with|featuring|feat\.?|with)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)',
             r'#\d+\s*[-–—]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)',
@@ -348,6 +392,35 @@ def extract_video_entities(
     return found
 
 
+def extract_content_tags(
+    clip_text: str,
+    source_title: str = "",
+    entities: Optional[List[Dict[str, Any]]] = None
+) -> List[str]:
+    """
+    Extracts targeted tags describing WHAT IS IN THE VIDEO based on actual topics,
+    concepts, actions, and spoken subjects.
+    """
+    corpus = f"{source_title} {clip_text}".lower()
+    tags_found: List[str] = []
+
+    # 1. Check topic rules
+    for keywords, rule_tags in TOPIC_TAG_RULES:
+        if any(kw in corpus for kw in keywords):
+            for t in rule_tags:
+                if t not in tags_found:
+                    tags_found.append(t)
+
+    # 2. Add entity hashtags
+    if entities:
+        for ent in entities:
+            for ht in ent.get("hashtags", []):
+                if ht not in tags_found:
+                    tags_found.append(ht)
+
+    return tags_found
+
+
 def extract_key_takeaways(clip_text: str, max_points: int = 3) -> List[str]:
     """
     Extracts 2-3 impactful narrative takeaways or turning points from the clip transcript.
@@ -356,30 +429,26 @@ def extract_key_takeaways(clip_text: str, max_points: int = 3) -> List[str]:
     if not raw_sentences:
         return [
             "The counter-intuitive insight that separates success from common mistakes.",
-            "Why conventional advice fails in high-stakes situations.",
+            "Why conventional thinking fails in high-stakes situations.",
             "The exact framework you can apply immediately."
         ]
 
-    signpost_words = ["because", "the reason", "if you", "you must", "never", "always", "the problem is", "the truth is", "what happens is", "when you", "the key is", "in reality", "most people"]
+    signpost_words = ["because", "the reason", "if you", "you must", "never", "always", "the problem is", "the truth is", "what happens is", "when you", "the key is", "in reality", "most people", "you have to"]
     highlighted = []
 
     for s in raw_sentences:
         s_lower = s.lower()
         if any(sp in s_lower for sp in signpost_words):
-            # Clean fillers
             cleaned = re.sub(r'^(and|so|but|yeah|like|you know|i mean)\s+', '', s, flags=re.IGNORECASE).strip()
             if len(cleaned) > 16:
                 highlighted.append(cleaned[0].upper() + cleaned[1:])
 
-    # Fallback to first few sentences if no signposts found
     if not highlighted:
         highlighted = [s[0].upper() + s[1:] for s in raw_sentences[:max_points]]
 
-    # Ensure unique and truncated neatly
     unique_points = []
     for p in highlighted:
         if p not in unique_points:
-            # End with period
             if not p.endswith((".", "!", "?")):
                 p += "."
             unique_points.append(p[:140])
@@ -400,9 +469,9 @@ def clean_source_description_excerpt(source_desc: str, max_chars: int = 220) -> 
     cleaned_lines = []
     for line in lines:
         line_clean = line.strip()
-        # Skip URLs, social links, timestamps, sponsorship tags
         if not line_clean:
             continue
+        # Skip URLs, social links, timestamps, sponsorship tags
         if re.search(r'https?://|www\.|bit\.ly|t\.co|instagram|twitter|tiktok|patreon|sponsor|discord|merch', line_clean, re.I):
             continue
         if re.match(r'^\d{1,2}:\d{2}', line_clean):
@@ -427,48 +496,52 @@ def generate_shorts_metadata(
     source_tags: str = ""
 ) -> Dict[str, Any]:
     """
-    Generates intelligent, highly engaging YouTube Shorts metadata designed to maximize
-    viewer retention and recommendation reach.
-    
-    1. Identifies WHO/WHAT is in the video (Person/Guest/Game/Topic).
-    2. Writes a rich breakdown describing what happens in the video.
-    3. Integrates context & credits from the original YouTube source.
-    4. Curates targeted hashtags & tags to trigger YouTube's recommendation engine.
+    Generates intelligent, highly engaging YouTube Shorts metadata:
+    1. NEVER adds #shorts or #short to the title (clean, punchy hook titles).
+    2. Identifies WHO/WHAT is in the video (Person/Guest/Game/Topic).
+    3. Adds targeted tags describing WHAT IS IN THE VIDEO.
+    4. NO software names (no ViralCut, no ShortCut) anywhere.
+    5. NO external source links (no Source Link URLs).
+    6. NO forced AI tags or AI mentions unless topic is explicitly Artificial Intelligence.
     """
     combined_context = f"{base_title} {source_filename} {source_title} {source_channel} {source_description} {clip_text} {source_tags}"
     profile = detect_niche_profile(combined_context)
     entities = extract_video_entities(clip_text, source_title, source_channel, source_description)
 
-    # 1. High-CTR Hook Title (Max 60 chars for mobile discovery)
-    title = (base_title or "").strip()
+    # 1. Clean Title: Strictly REMOVE any #shorts / #short tag. Keep it clean and hook-driven!
+    raw_title = (base_title or "").strip()
+    # Strip any #shorts, #short, or #SHORTS tag
+    clean_title = re.sub(r'#shorts?\b', '', raw_title, flags=re.IGNORECASE).strip()
+    clean_title = re.sub(r'\s{2,}', ' ', clean_title).strip()
+
     primary_entity = entities[0]["name"] if entities else None
 
-    if not title:
+    if not clean_title:
         if primary_entity:
-            title = f"{primary_entity}: {profile['fallback_title']}"
+            clean_title = f"{primary_entity}: {profile['fallback_title']}"
         else:
-            title = profile["fallback_title"]
+            clean_title = profile["fallback_title"]
 
-    if not title.endswith("!") and not title.endswith("?"):
-        title += "!"
+    clean_title = re.sub(r'#shorts?\b', '', clean_title, flags=re.IGNORECASE).strip()
+    clean_title = re.sub(r'\s{2,}', ' ', clean_title).strip()
 
-    if len(title) <= 50 and "#shorts" not in title.lower():
-        title = f"{title} #Shorts"
+    if not clean_title.endswith("!") and not clean_title.endswith("?"):
+        clean_title += "!"
 
-    # 2. Dynamic Hashtags & SEO Tags
-    entity_hashtags = []
-    entity_tags = []
-    for ent in entities:
-        for ht in ent.get("hashtags", []):
-            if ht not in entity_hashtags:
-                entity_hashtags.append(ht)
-        for tg in ent.get("tags", []):
-            if tg not in entity_tags:
-                entity_tags.append(tg)
+    # 2. Tags describing WHAT IS IN THE VIDEO
+    content_tags = extract_content_tags(clip_text, source_title, entities)
 
-    # Channel and Niche hashtags
-    niche_hashtags = list(profile["hashtags"])
-    all_hashtags = ["#Shorts", "#YouTubeShorts"] + entity_hashtags[:4] + [h for h in niche_hashtags if h not in ["#Shorts", "#PDX"]] + [f"#{channel_name}"]
+    # Combine with core discovery tags (without forcing #AI)
+    niche_hashtags = [h for h in profile["hashtags"] if h.lower() not in ["#shorts", f"#{channel_name.lower()}"]]
+    
+    # Do NOT include #AI or #ArtificialIntelligence unless explicitly mentioned in clip/title
+    has_explicit_ai = any(w in combined_context.lower() for w in ["artificial intelligence", "chatgpt", "openai", "machine learning", "deep learning"])
+    if not has_explicit_ai:
+        content_tags = [t for t in content_tags if t.lower() not in ["#ai", "#artificialintelligence", "#futuretech"]]
+        niche_hashtags = [t for t in niche_hashtags if t.lower() not in ["#ai", "#artificialintelligence"]]
+
+    all_hashtags = ["#Shorts", "#YouTubeShorts"] + content_tags + niche_hashtags + [f"#{channel_name}"]
+
     # Deduplicate while preserving order
     seen_ht = set()
     dedup_hashtags = []
@@ -480,11 +553,17 @@ def generate_shorts_metadata(
 
     hashtags_str = " ".join(dedup_hashtags[:12])
 
-    seo_tags = list(dict.fromkeys(entity_tags + profile["tags"] + [channel_name, "viral shorts", "trending shorts"]))[:25]
+    seo_tags = list(dict.fromkeys(
+        [t.strip("#") for t in content_tags] +
+        profile["tags"] +
+        [channel_name, "viral shorts", "trending shorts"]
+    ))[:25]
+    if not has_explicit_ai:
+        seo_tags = [t for t in seo_tags if t.lower() not in ["ai", "artificial intelligence"]]
 
     # 3. Descriptive Breakdown & Narrative Context
     sentences = [s.strip() for s in re.split(r'[.!?]+', (clip_text or "").strip()) if len(s.strip()) > 10]
-    hook_quote = f'"{sentences[0]}"' if sentences else f'"{profile["fallback_title"]}"'
+    hook_quote = f'"{sentences[0]}"' if sentences else f'"{clean_title}"'
     takeaways = extract_key_takeaways(clip_text, max_points=3)
 
     # Entity / Featuring Line
@@ -501,18 +580,18 @@ def generate_shorts_metadata(
     else:
         feat_line = f"🎯 TOPIC: {profile['topic_label']}"
 
-    # YouTube Source Credits
+    # YouTube Source Credits (Channel and Video Title only -- NO external link URL)
     yt_context_block = ""
     if source_title:
         yt_context_block += f"📺 ORIGINAL VIDEO: {source_title}\n"
     if source_channel:
-        yt_context_block += f"🎬 SOURCE CHANNEL: @{source_channel} (Full credit to creators)\n"
+        yt_context_block += f"🎬 SOURCE CHANNEL: @{source_channel} (Credit to creators)\n"
 
     # Context excerpt from original YouTube video if available
     desc_excerpt = clean_source_description_excerpt(source_description)
     context_note = f"\n📌 BACKGROUND CONTEXT:\n{desc_excerpt}\n" if (desc_excerpt and len(desc_excerpt) > 40) else ""
 
-    # Build the full PDX High-Engagement Description
+    # Build the full PDX High-Engagement Description (NO software name, NO source link, NO forced AI)
     description = f"""🔥 {hook_quote} {profile['emoji']}
 
 {feat_line}
@@ -532,19 +611,16 @@ In this high-impact moment, {primary_entity if primary_entity else 'the speaker'
 {profile['niche_line']}
 
 {hashtags_str}
-
----
-Rendered in 1080p Full HD with ViralCut AI for {channel_name}.
-{f'Source Link: {source_url}' if source_url else ''}
 """.strip()
 
     return {
-        "title": title[:100],
+        "title": clean_title[:95],
         "description": description,
         "hashtags": hashtags_str,
         "tags": seo_tags,
         "category": profile["category"],
         "entities_found": [e["name"] for e in entities],
+        "content_tags": content_tags,
         "primary_entity": primary_entity,
         "topic_label": profile["topic_label"]
     }

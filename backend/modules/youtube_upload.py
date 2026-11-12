@@ -90,7 +90,7 @@ class YouTubeUploader:
                     "snippet": {
                         "title": title[:100],
                         "description": description,
-                        "tags": tags or ["Shorts", "PDX", "ViralCutAI"],
+                        "tags": tags or ["Shorts", "PDX", "Trending"],
                         "categoryId": "22"  # People & Blogs / Entertainment
                     },
                     "status": status_config

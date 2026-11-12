@@ -2073,7 +2073,7 @@ export default function App() {
                       </div>
 
                       <div className="form-group">
-                        <label>YouTube Short Title (under 60 chars with #Shorts for mobile discovery)</label>
+                        <label>YouTube Short Title (Clean high-CTR hook title, under 60 chars)</label>
                         <input
                           type="text"
                           className="form-control"
