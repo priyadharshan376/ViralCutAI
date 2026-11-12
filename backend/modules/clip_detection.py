@@ -3,7 +3,8 @@ import logging
 from typing import List, Dict, Any
 from backend.modules.transcript_analysis import segment_transcript
 from backend.services.ai_service import get_ai_service
-from backend.database.db import save_clip, delete_clips_for_video
+from backend.database.db import save_clip, delete_clips_for_video, get_video
+from backend.modules.metadata_generator import generate_shorts_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,26 @@ def detect_and_rank_clips(
     final_clips = sorted(final_clips, key=lambda c: c["start_time"])
     logger.info(f"[{video_id}] Selected {len(final_clips)} distinct narrative story clips across video.")
 
-    # Step 5: Persist to DB
+    # Step 5: Enrich with High-Engagement PDX Metadata (YouTube context & entity awareness)
+    video_rec = get_video(video_id) or {}
+    for clip in final_clips:
+        meta = generate_shorts_metadata(
+            clip_text=clip["transcript_text"],
+            base_title=clip.get("title", ""),
+            channel_name="PDX",
+            source_filename=video_rec.get("filename", ""),
+            source_title=video_rec.get("source_title", ""),
+            source_channel=video_rec.get("source_channel", ""),
+            source_description=video_rec.get("source_description", ""),
+            source_url=video_rec.get("source_url", ""),
+            source_tags=video_rec.get("source_tags", "")
+        )
+        clip["title"] = meta["title"]
+        clip["description"] = meta["description"]
+        clip["hashtags"] = meta["hashtags"]
+        clip["subtitle_style"] = "hormozi"
+
+    # Step 6: Persist to DB
     if persist_to_db:
         delete_clips_for_video(video_id)
         for clip in final_clips:

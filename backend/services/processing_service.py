@@ -143,7 +143,9 @@ def render_clip_pipeline(
     include_subtitles: bool = True,
     subtitle_style: str = "hormozi",
     quality_preset: str = "high",
-    include_hook_banner: bool = True
+    include_hook_banner: bool = True,
+    custom_title: Optional[str] = None,
+    custom_description: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Phase 3: Converts an approved or detected clip into a finished 1080x1920 9:16 YouTube Short.
@@ -194,12 +196,22 @@ def render_clip_pipeline(
                 hook_banner_text=clip.get("title") if include_hook_banner else None
             )
 
-    # Generate YouTube metadata
+    # Generate High-Engagement PDX YouTube metadata with entity & source awareness
     metadata = generate_shorts_metadata(
         clip_text=clip["transcript_text"],
-        base_title=clip["title"],
-        source_filename=video.get("filename", "")
+        base_title=custom_title or clip.get("title", ""),
+        channel_name="PDX",
+        source_filename=video.get("filename", ""),
+        source_title=video.get("source_title", ""),
+        source_channel=video.get("source_channel", ""),
+        source_description=video.get("source_description", ""),
+        source_url=video.get("source_url", ""),
+        source_tags=video.get("source_tags", "")
     )
+
+    final_title = custom_title or clip.get("title") or metadata["title"]
+    final_desc = custom_description or clip.get("description") or metadata["description"]
+    final_hashtags = clip.get("hashtags") or metadata["hashtags"]
 
     # Render vertical 1080x1920 video
     output_path = render_vertical_short(
@@ -225,9 +237,9 @@ def render_clip_pipeline(
     update_clip_render_result(
         clip_id=clip_id,
         output_path=output_path,
-        title=metadata["title"],
-        description=metadata["description"],
-        hashtags=metadata["hashtags"],
+        title=final_title,
+        description=final_desc,
+        hashtags=final_hashtags,
         layout_mode=selected_layout,
         subtitle_style="none" if (not include_subtitles or subtitle_style == "none") else selected_sub_style
     )

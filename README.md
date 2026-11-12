@@ -38,6 +38,19 @@ Auto-discovers high-retention long-form videos across 7 proven viral niches:
 - Visual timeline preview of scheduled releases.
 - Auto-rerender in 1080p HD before upload.
 
+### 5. 📝 High-Engagement YouTube SEO Description & Entity Recognition Engine
+- **Identifies Who & What is in the Video**: Recognizes prominent speakers, guests, and games (e.g., Elon Musk, Joe Rogan, Jordan Peterson, Andrew Tate, GTA 6 / Rockstar Games, Sam Altman, Andrew Huberman, Alex Hormozi).
+- **YouTube Source Ingestion & Attribution**: Captures original video title, channel name (`@PowerfulJRE`, `@RockstarGames`), original description context, and episode URL to credit creators and improve YouTube's Knowledge Graph indexing.
+- **Narrative Video Breakdown**:
+  - Attention-grabbing opening quote hook.
+  - Clear **"🎙️ FEATURING:"** and **"📺 ORIGINAL VIDEO:"** credit blocks.
+  - **"📌 IN THIS SHORT:"** context summary explaining what happens in the video.
+  - **"💡 KEY TAKEAWAYS:"** 3 bullet points distilled from spoken words.
+  - **Comment-Catalyst Question**: Niche-specific discussion questions to boost viewer comments (primary YouTube algorithm ranking signal).
+  - **Channel Subscription Call-to-Action**: Directs traffic to `@PDX`.
+  - **Targeted Entity Hashtags**: Mix of entity tags (`#ElonMusk`, `#JoeRogan`, `#GTA6`), niche tags, and discovery tags (`#Shorts`, `#YouTubeShorts`, `#PDX`).
+- **One-Click AI Enrichment in Shorts Editor**: Click `✨ AI Enrich from YouTube & Video Info` to automatically generate or update metadata anytime.
+
 ---
 
 ## 📌 Complete System Architecture
@@ -48,6 +61,7 @@ Auto-discovers high-retention long-form videos across 7 proven viral niches:
 | **YouTube Discovery Engine** | 7 viral niches, high-retention filtering, auto-import to clipping pipeline | ✅ Verified & Tested |
 | **1080p Rendering Engine** | Dynamic Smart Crop, Opening Hook Banner, 7 subtitle styles, 1080x1920 Lanczos | ✅ Verified & Tested |
 | **Batch Scheduler** | Automated staggered publishing to YouTube channel **PDX** | ✅ Verified & Tested |
+| **SEO Description Engine** | Entity recognition, YouTube source ingestion, narrative takeaways, comment drivers & targeted hashtags | ✅ Verified & Tested |
 
 ---
 

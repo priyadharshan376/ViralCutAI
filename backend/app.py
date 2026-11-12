@@ -21,6 +21,8 @@ from backend.database.db import (
     get_clips_by_video_id,
     get_clip,
     update_clip_status,
+    update_clip_metadata,
+    update_video_source_info,
     delete_clips_for_video,
     record_youtube_upload,
     update_youtube_upload_status,
@@ -30,6 +32,7 @@ from backend.database.db import (
 )
 from backend.modules.video_input import save_uploaded_video
 from backend.modules.clip_detection import detect_and_rank_clips
+from backend.modules.metadata_generator import generate_shorts_metadata
 from backend.modules.youtube_upload import get_youtube_uploader
 from backend.modules.youtube_download import is_valid_youtube_url, inspect_youtube_video, download_youtube_video
 from backend.modules.youtube_discovery import DISCOVERY_PRESETS, discover_best_youtube_videos
@@ -147,12 +150,14 @@ async def upload_video(
     logger.info(f"Incoming video upload: {file.filename}")
     video_id, file_path, file_size = await save_uploaded_video(file)
     
-    # Create database record
+    # Create database record with clean source title
+    safe_title = Path(file.filename).stem.replace('_', ' ').replace('-', ' ').strip()
     video_record = create_video_record(
         video_id=video_id,
         filename=file.filename,
         filepath=file_path,
-        file_size=file_size
+        file_size=file_size,
+        source_title=safe_title
     )
 
     # Trigger Phase 1 processing pipeline as background task
@@ -355,7 +360,12 @@ async def download_youtube_project_endpoint(
             video_id=video_id,
             filename=download_info["filename"],
             filepath=download_info["filepath"],
-            file_size=download_info["file_size"]
+            file_size=download_info["file_size"],
+            source_title=download_info.get("title", ""),
+            source_channel=download_info.get("channel", ""),
+            source_description=download_info.get("source_description", ""),
+            source_url=download_info.get("webpage_url", req.url),
+            source_tags=download_info.get("source_tags", "")
         )
 
         background_tasks.add_task(process_video_pipeline, video_id)
@@ -432,12 +442,16 @@ class DetectClipsRequest(BaseModel):
 class UpdateClipRequest(BaseModel):
     status: Optional[str] = None
     title: Optional[str] = None
+    description: Optional[str] = None
+    hashtags: Optional[str] = None
 
 class RenderClipRequest(BaseModel):
     layout_mode: str = Field(default="auto", description="'auto', 'blur_background', or 'smart_crop'")
     include_subtitles: bool = Field(default=True)
     subtitle_style: str = Field(default="hormozi", description="Subtitle preset ID")
     quality_preset: str = Field(default="high", description="'ultra', 'high', or 'balanced'")
+    custom_title: Optional[str] = None
+    custom_description: Optional[str] = None
 
 class YouTubeUploadRequest(BaseModel):
     privacy_status: str = Field(default="public", description="'public', 'unlisted', or 'private'")
@@ -488,7 +502,24 @@ def upload_clip_to_youtube_endpoint(clip_id: str, req: YouTubeUploadRequest = Yo
         )
 
     title = req.custom_title or clip["title"] or "Viral Short by ViralCut AI"
-    description = req.custom_description or clip["description"] or f"{title}\n\n#Shorts #Viral"
+    description = req.custom_description or clip.get("description")
+    if not description or description == f"{title}\n\n#Shorts #Viral" or len(description.strip()) < 30:
+        video = get_video(clip["video_id"]) or {}
+        meta = generate_shorts_metadata(
+            clip_text=clip["transcript_text"],
+            base_title=title,
+            channel_name="PDX",
+            source_filename=video.get("filename", ""),
+            source_title=video.get("source_title", ""),
+            source_channel=video.get("source_channel", ""),
+            source_description=video.get("source_description", ""),
+            source_url=video.get("source_url", ""),
+            source_tags=video.get("source_tags", "")
+        )
+        description = meta["description"]
+        if not clip.get("hashtags"):
+            clip["hashtags"] = meta["hashtags"]
+
     upload_id = str(uuid.uuid4())
 
     # Record initial pending upload in SQLite
@@ -599,7 +630,24 @@ def batch_upload_clips_to_youtube_endpoint(req: BatchYouTubeUploadRequest):
             clip_privacy = "private"  # YouTube requires private for scheduled videos
 
         title = clip.get("title") or "Mindset & Habit Trick #Shorts"
-        description = clip.get("description") or f"{title}\n\n#Shorts #PDX"
+        description = clip.get("description")
+        if not description or description == f"{title}\n\n#Shorts #PDX" or len(description.strip()) < 30:
+            video = get_video(clip["video_id"]) or {}
+            meta = generate_shorts_metadata(
+                clip_text=clip["transcript_text"],
+                base_title=title,
+                channel_name="PDX",
+                source_filename=video.get("filename", ""),
+                source_title=video.get("source_title", ""),
+                source_channel=video.get("source_channel", ""),
+                source_description=video.get("source_description", ""),
+                source_url=video.get("source_url", ""),
+                source_tags=video.get("source_tags", "")
+            )
+            description = meta["description"]
+            if not clip.get("hashtags"):
+                clip["hashtags"] = meta["hashtags"]
+
         tags = [t.strip("#") for t in (clip.get("hashtags") or "").split() if t]
         upload_id = str(uuid.uuid4())
 
@@ -678,7 +726,9 @@ def render_clip_endpoint(clip_id: str, req: RenderClipRequest = RenderClipReques
             layout_mode=req.layout_mode,
             include_subtitles=(req.include_subtitles and req.subtitle_style != "none"),
             subtitle_style=req.subtitle_style,
-            quality_preset=req.quality_preset
+            quality_preset=req.quality_preset,
+            custom_title=req.custom_title,
+            custom_description=req.custom_description
         )
         return {
             "success": True,
@@ -760,16 +810,62 @@ def get_clip_details_endpoint(clip_id: str):
 
 @app.patch("/api/clips/{clip_id}")
 def update_clip_endpoint(clip_id: str, req: UpdateClipRequest):
-    """Update clip status ('approved', 'rejected') or edit title."""
+    """Update clip status ('approved', 'rejected') or edit title, description, and hashtags."""
     clip = get_clip(clip_id)
     if not clip:
         raise HTTPException(status_code=404, detail="Clip not found.")
 
     new_status = req.status or clip["status"]
-    update_clip_status(clip_id, new_status, title=req.title)
+    update_clip_status(
+        clip_id=clip_id,
+        status=new_status,
+        title=req.title,
+        description=req.description,
+        hashtags=req.hashtags
+    )
     return {
         "success": True,
         "message": f"Clip {clip_id} updated.",
+        "clip": get_clip(clip_id)
+    }
+
+@app.post("/api/clips/{clip_id}/generate-metadata")
+def generate_clip_metadata_endpoint(clip_id: str):
+    """
+    Intelligently generates high-engagement PDX YouTube Shorts metadata:
+    - Identifies WHO/WHAT is in the video (Person/Guest/Game/Topic)
+    - Synthesizes an engaging breakdown describing what happens in the video
+    - Extracts context, episode title, channel credit, and links from the original YouTube source
+    - Builds targeted hashtags and SEO tags for maximum algorithmic reach
+    """
+    clip = get_clip(clip_id)
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found.")
+
+    video = get_video(clip["video_id"]) or {}
+    meta = generate_shorts_metadata(
+        clip_text=clip["transcript_text"],
+        base_title=clip.get("title", ""),
+        channel_name="PDX",
+        source_filename=video.get("filename", ""),
+        source_title=video.get("source_title", ""),
+        source_channel=video.get("source_channel", ""),
+        source_description=video.get("source_description", ""),
+        source_url=video.get("source_url", ""),
+        source_tags=video.get("source_tags", "")
+    )
+
+    update_clip_metadata(
+        clip_id=clip_id,
+        title=meta["title"],
+        description=meta["description"],
+        hashtags=meta["hashtags"]
+    )
+
+    return {
+        "success": True,
+        "clip_id": clip_id,
+        "metadata": meta,
         "clip": get_clip(clip_id)
     }
 

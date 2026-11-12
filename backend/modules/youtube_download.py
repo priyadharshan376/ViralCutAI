@@ -158,6 +158,12 @@ def download_youtube_video(
 
         logger.info(f"[{video_id}] YouTube download completed: {expected_filepath} ({file_size / (1024*1024):.1f} MB)")
 
+        channel_name = info.get("uploader") or info.get("channel") or ""
+        source_desc = info.get("description") or ""
+        source_tags_list = info.get("tags") or []
+        source_tags_str = ",".join(source_tags_list[:25]) if isinstance(source_tags_list, list) else str(source_tags_list)
+        webpage_url = info.get("webpage_url") or clean_url
+
         return {
             "video_id": video_id,
             "filename": safe_filename,
@@ -165,6 +171,10 @@ def download_youtube_video(
             "file_size": file_size,
             "duration": duration,
             "title": video_title,
+            "channel": channel_name,
+            "source_description": source_desc,
+            "source_tags": source_tags_str,
+            "webpage_url": webpage_url,
             "thumbnail": info.get("thumbnail", "")
         }
     except Exception as e:

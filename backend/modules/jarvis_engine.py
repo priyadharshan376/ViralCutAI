@@ -518,6 +518,14 @@ class JarvisViralCutEngine:
                 "action_type": "studio_advice"
             }
 
+        # 3.6 Description, Entities & YouTube Info Synthesis
+        if any(kw in clean for kw in ["description", "hashtag", "who is in", "what is in", "youtube info", "seo", "reach viewers"]):
+            return {
+                "response": "To maximize viewer reach on YouTube Shorts, sir: Our engine extracts who and what is in the video (such as Elon Musk, Joe Rogan, or GTA 6), links the original YouTube episode title and channel credit, and structures the PDX High-Engagement Description with key takeaways, comment-driver questions, and entity hashtags. You can click 'AI Enrich Description' in the Shorts Editor to generate this instantly.",
+                "action_type": "studio_advice",
+                "directive": {"trigger_action": "switch_tab", "tab": "editor"}
+            }
+
         # 4. Windows Hardware & System Controls
         # 4.1 System Vitals & Performance
         if any(kw in clean for kw in ["cpu", "ram", "memory", "battery", "disk", "storage", "performance", "pc status", "diagnostics", "vitals"]):

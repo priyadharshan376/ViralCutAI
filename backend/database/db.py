@@ -30,6 +30,11 @@ def init_db():
                 audio_codec TEXT DEFAULT '',
                 status TEXT DEFAULT 'uploaded',
                 error_message TEXT DEFAULT '',
+                source_title TEXT DEFAULT '',
+                source_channel TEXT DEFAULT '',
+                source_description TEXT DEFAULT '',
+                source_url TEXT DEFAULT '',
+                source_tags TEXT DEFAULT '',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -81,6 +86,19 @@ def init_db():
         """)
         
         # Safe migration for existing DB
+        cursor.execute("PRAGMA table_info(videos)")
+        v_cols = [row[1] for row in cursor.fetchall()]
+        if "source_title" not in v_cols:
+            cursor.execute("ALTER TABLE videos ADD COLUMN source_title TEXT DEFAULT ''")
+        if "source_channel" not in v_cols:
+            cursor.execute("ALTER TABLE videos ADD COLUMN source_channel TEXT DEFAULT ''")
+        if "source_description" not in v_cols:
+            cursor.execute("ALTER TABLE videos ADD COLUMN source_description TEXT DEFAULT ''")
+        if "source_url" not in v_cols:
+            cursor.execute("ALTER TABLE videos ADD COLUMN source_url TEXT DEFAULT ''")
+        if "source_tags" not in v_cols:
+            cursor.execute("ALTER TABLE videos ADD COLUMN source_tags TEXT DEFAULT ''")
+
         cursor.execute("PRAGMA table_info(clips)")
         columns = [row[1] for row in cursor.fetchall()]
         if "output_path" not in columns:
@@ -128,15 +146,61 @@ def init_db():
 
 # Database Helper Functions
 
-def create_video_record(video_id: str, filename: str, filepath: str, file_size: int) -> Dict[str, Any]:
+def create_video_record(
+    video_id: str,
+    filename: str,
+    filepath: str,
+    file_size: int,
+    source_title: str = "",
+    source_channel: str = "",
+    source_description: str = "",
+    source_url: str = "",
+    source_tags: str = ""
+) -> Dict[str, Any]:
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO videos (id, filename, filepath, file_size, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, 'uploaded', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        """, (video_id, filename, filepath, file_size))
+            INSERT INTO videos (
+                id, filename, filepath, file_size, status,
+                source_title, source_channel, source_description, source_url, source_tags,
+                created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, 'uploaded', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """, (
+            video_id, filename, filepath, file_size,
+            source_title, source_channel, source_description, source_url, source_tags
+        ))
         conn.commit()
     return get_video(video_id)
+
+def update_video_source_info(
+    video_id: str,
+    source_title: str = "",
+    source_channel: str = "",
+    source_description: str = "",
+    source_url: str = "",
+    source_tags: str = ""
+):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE videos
+            SET source_title = CASE WHEN ? != '' THEN ? ELSE source_title END,
+                source_channel = CASE WHEN ? != '' THEN ? ELSE source_channel END,
+                source_description = CASE WHEN ? != '' THEN ? ELSE source_description END,
+                source_url = CASE WHEN ? != '' THEN ? ELSE source_url END,
+                source_tags = CASE WHEN ? != '' THEN ? ELSE source_tags END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (
+            source_title, source_title,
+            source_channel, source_channel,
+            source_description, source_description,
+            source_url, source_url,
+            source_tags, source_tags,
+            video_id
+        ))
+        conn.commit()
 
 def update_video_metadata(video_id: str, metadata: Dict[str, Any]):
     with get_connection() as conn:
@@ -240,8 +304,8 @@ def save_clip(clip_data: Dict[str, Any]) -> str:
                 id, video_id, start_time, end_time, duration, transcript_text,
                 hook_score, emotional_score, information_score, storytelling_score,
                 context_score, engagement_score, viral_score, reason, title, status,
-                has_visual, layout_mode, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                has_visual, layout_mode, description, hashtags, subtitle_style, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """, (
             clip_data["id"],
             clip_data["video_id"],
@@ -260,7 +324,10 @@ def save_clip(clip_data: Dict[str, Any]) -> str:
             clip_data.get("title", ""),
             clip_data.get("status", "detected"),
             1 if clip_data.get("has_visual") else 0,
-            clip_data.get("layout_mode", "auto")
+            clip_data.get("layout_mode", "auto"),
+            clip_data.get("description", ""),
+            clip_data.get("hashtags", ""),
+            clip_data.get("subtitle_style", "hormozi")
         ))
         conn.commit()
     return clip_data["id"]
@@ -282,19 +349,40 @@ def get_clip(clip_id: str) -> Optional[Dict[str, Any]]:
         row = cursor.fetchone()
         return dict(row) if row else None
 
-def update_clip_status(clip_id: str, status: str, title: Optional[str] = None):
+def update_clip_status(
+    clip_id: str,
+    status: str,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    hashtags: Optional[str] = None
+):
     with get_connection() as conn:
         cursor = conn.cursor()
-        if title is not None:
-            cursor.execute(
-                "UPDATE clips SET status = ?, title = ? WHERE id = ?",
-                (status, title, clip_id)
-            )
-        else:
-            cursor.execute(
-                "UPDATE clips SET status = ? WHERE id = ?",
-                (status, clip_id)
-            )
+        cursor.execute("""
+            UPDATE clips
+            SET status = ?,
+                title = COALESCE(?, title),
+                description = COALESCE(?, description),
+                hashtags = COALESCE(?, hashtags)
+            WHERE id = ?
+        """, (status, title, description, hashtags, clip_id))
+        conn.commit()
+
+def update_clip_metadata(
+    clip_id: str,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    hashtags: Optional[str] = None
+):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE clips
+            SET title = COALESCE(?, title),
+                description = COALESCE(?, description),
+                hashtags = COALESCE(?, hashtags)
+            WHERE id = ?
+        """, (title, description, hashtags, clip_id))
         conn.commit()
 
 def update_clip_render_result(

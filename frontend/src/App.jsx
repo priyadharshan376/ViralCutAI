@@ -120,6 +120,7 @@ export default function App() {
   const [renderingClipId, setRenderingClipId] = useState(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [privacyStatus, setPrivacyStatus] = useState('public');
+  const [isGeneratingMetadata, setIsGeneratingMetadata] = useState(false);
 
   // YouTube Discovery State
   const [discoverQuery, setDiscoverQuery] = useState('millionaire mindset discipline success habits speech interview');
@@ -872,7 +873,9 @@ export default function App() {
           layout_mode: layout,
           include_subtitles: subStyle !== 'none',
           subtitle_style: subStyle,
-          quality_preset: quality
+          quality_preset: quality,
+          custom_title: editTitle,
+          custom_description: editDescription
         })
       });
       if (!res.ok) throw new Error('Render failed');
@@ -887,6 +890,60 @@ export default function App() {
       alert(`Render error: ${err.message}`);
     } finally {
       setRenderingClipId(null);
+    }
+  };
+
+  // Generate / Enrich Metadata from YouTube Source & Video Entities
+  const handleGenerateEnrichedMetadata = async () => {
+    if (!selectedClip) return;
+    setIsGeneratingMetadata(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/clips/${selectedClip.id}/generate-metadata`, {
+        method: 'POST'
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Metadata generation failed');
+      }
+      const data = await res.json();
+      if (data.metadata) {
+        setEditTitle(data.metadata.title);
+        setEditDescription(data.metadata.description);
+        const updated = data.clip;
+        setClips(prev => prev.map(c => c.id === selectedClip.id ? updated : c));
+        setSelectedClip(updated);
+        const entityNotice = data.metadata.entities_found?.length > 0
+          ? `Identified in video: ${data.metadata.entities_found.join(', ')}`
+          : `Synthesized for topic: ${data.metadata.topic_label || 'High Impact'}`;
+        alert(`✨ Success! PDX High-Engagement Description & Hashtags generated with YouTube details and video context.\n${entityNotice}`);
+      }
+    } catch (err) {
+      alert(`Enrich error: ${err.message}`);
+    } finally {
+      setIsGeneratingMetadata(false);
+    }
+  };
+
+  // Save Metadata Only (without re-rendering video)
+  const handleSaveMetadataOnly = async () => {
+    if (!selectedClip) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/clips/${selectedClip.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: editTitle,
+          description: editDescription
+        })
+      });
+      if (!res.ok) throw new Error('Failed to save metadata');
+      const data = await res.json();
+      const updated = data.clip;
+      setClips(prev => prev.map(c => c.id === selectedClip.id ? updated : c));
+      setSelectedClip(updated);
+      alert('Title and High-Engagement Description saved successfully!');
+    } catch (err) {
+      alert(`Save error: ${err.message}`);
     }
   };
 
@@ -2026,13 +2083,50 @@ export default function App() {
                       </div>
 
                       <div className="form-group">
-                        <label>PDX High-Engagement Description & Hashtags</label>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <label style={{ margin: 0, fontWeight: 700 }}>PDX High-Engagement Description &amp; Hashtags</label>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={handleGenerateEnrichedMetadata}
+                            disabled={isGeneratingMetadata}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              fontSize: 11,
+                              padding: '4px 12px',
+                              borderColor: '#38bdf8',
+                              color: '#67e8f9',
+                              background: 'rgba(6, 182, 212, 0.12)'
+                            }}
+                            title="Auto-detect who is in the video, include original YouTube source info & generate high-reach hashtags"
+                          >
+                            <Sparkles size={13} color="#38bdf8" />
+                            {isGeneratingMetadata ? 'Enriching with YouTube Info...' : '✨ AI Enrich from YouTube & Video Info'}
+                          </button>
+                        </div>
                         <textarea
                           className="form-control"
-                          style={{ minHeight: 140 }}
+                          style={{ minHeight: 170, fontSize: 12, lineHeight: 1.5, fontFamily: 'Consolas, monospace' }}
                           value={editDescription}
                           onChange={(e) => setEditDescription(e.target.value)}
+                          placeholder="PDX High-Engagement Description with YouTube source credit, who is in the video, takeaways, and hashtags..."
                         />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                            ⚡ Describes who/what is in the video, YouTube source credits, and targeted entity hashtags to maximize viewer reach.
+                          </span>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={handleSaveMetadataOnly}
+                            style={{ fontSize: 11, padding: '3px 10px' }}
+                            title="Save Title and Description to database"
+                          >
+                            Save Metadata
+                          </button>
+                        </div>
                       </div>
 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
@@ -2547,6 +2641,7 @@ export default function App() {
                   {[
                     "Take a screenshot of my screen",
                     "How do I increase my 40.9% watch rate?",
+                    "Describe who is in the video & YouTube source info",
                     "Focus Studio: switch to shorts editor",
                     "Auto-discover GTA 6 viral gameplay videos",
                     "Launch 1080p batch scheduler",
