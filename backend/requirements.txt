@@ -10,5 +10,8 @@ google-auth-oauthlib>=1.2.0
 google-auth-httplib2>=0.2.0
 aiofiles>=23.2.1
 requests>=2.31.0
+psutil>=5.9.0
+pillow>=10.0.0
+mss>=9.0.0
 
 yt-dlp>=2024.0.0

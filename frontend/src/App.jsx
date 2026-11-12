@@ -27,7 +27,21 @@ import {
   Link2,
   Search,
   Type,
-  Film
+  Film,
+  Bot,
+  Mic,
+  Volume2,
+  VolumeX,
+  Camera,
+  Cpu,
+  Activity,
+  MessageSquare,
+  Lock,
+  Radio,
+  Trash2,
+  Plus,
+  HardDrive,
+  Monitor
 } from 'lucide-react';
 
 const API_BASE = 'http://127.0.0.1:8000';
@@ -124,13 +138,271 @@ export default function App() {
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [discoverStats, setDiscoverStats] = useState(null);
 
+  // J.A.R.V.I.S. AI Co-Pilot & System State
+  const [jarvisMessages, setJarvisMessages] = useState([
+    {
+      role: 'jarvis',
+      text: 'Good day, sir. J.A.R.V.I.S. is online and linked to ViralCut AI and your workstation. I can control your rendering pipelines, manage volume, capture screenshots, run custom routines, or monitor your hardware. What are your orders?',
+      time: 'ONLINE'
+    }
+  ]);
+  const [jarvisInput, setJarvisInput] = useState('');
+  const [isJarvisListening, setIsJarvisListening] = useState(false);
+  const [jarvisStatus, setJarvisStatus] = useState('STANDBY • READY');
+  const [jarvisVitals, setJarvisVitals] = useState(null);
+  const [jarvisCommands, setJarvisCommands] = useState([]);
+  const [showJarvisFloating, setShowJarvisFloating] = useState(false);
+  const [jarvisVoiceOutput, setJarvisVoiceOutput] = useState(true);
+
   useEffect(() => {
     fetchAnalytics();
     fetchVideos();
     fetchYouTubeUploads();
     fetchSubtitleStyles();
     fetchDiscoverPresets();
+    fetchJarvisCommands();
+    fetchJarvisVitals();
+
+    const vitalsTimer = setInterval(fetchJarvisVitals, 4000);
+    return () => clearInterval(vitalsTimer);
   }, []);
+
+  const fetchJarvisVitals = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/jarvis/vitals`);
+      if (res.ok) {
+        const data = await res.json();
+        setJarvisVitals(data);
+      }
+    } catch (e) {
+      // Background poll fail silent
+    }
+  };
+
+  const fetchJarvisCommands = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/jarvis/commands`);
+      if (res.ok) {
+        const data = await res.json();
+        setJarvisCommands(data.commands || []);
+      }
+    } catch (e) {
+      console.error('Failed to load Jarvis commands:', e);
+    }
+  };
+
+  const speakJarvisTTS = (text) => {
+    if (!jarvisVoiceOutput) return;
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const cleanText = text.replace(/[*_#`~[\]]/g, '').slice(0, 320);
+    const utter = new SpeechSynthesisUtterance(cleanText);
+    utter.rate = 1.05;
+    utter.pitch = 0.95;
+    const voices = window.speechSynthesis.getVoices();
+    const bestVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Male') || v.name.includes('David') || v.name.includes('George') || v.name.includes('Natural') || v.name.includes('Google US English')));
+    if (bestVoice) utter.voice = bestVoice;
+    utter.onstart = () => setJarvisStatus('TRANSMITTING VOICE...');
+    utter.onend = () => setJarvisStatus('STANDBY • READY');
+    window.speechSynthesis.speak(utter);
+  };
+
+  const handleJarvisSend = async (overrideText = null) => {
+    const textToSend = (overrideText !== null ? overrideText : jarvisInput).trim();
+    if (!textToSend) return;
+
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setJarvisMessages(prev => [...prev, { role: 'user', text: textToSend, time: timeStr }]);
+    if (overrideText === null) setJarvisInput('');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/jarvis/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: textToSend,
+          context: {
+            active_tab: activeTab,
+            total_clips: clips.length,
+            total_uploads: uploads.length,
+            target_channel: 'PDX',
+            current_quality: editQualityPreset
+          }
+        })
+      });
+      const data = await res.json();
+      const reply = data.response || "Understood, sir.";
+      const jarvisTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      setJarvisMessages(prev => [
+        ...prev,
+        {
+          role: 'jarvis',
+          text: reply,
+          time: jarvisTime,
+          imgUrl: data.directive?.url || null
+        }
+      ]);
+      speakJarvisTTS(reply);
+
+      // Handle Directives from Jarvis
+      if (data.directive) {
+        const d = data.directive;
+        if (d.trigger_action === 'switch_tab' && d.action_param) {
+          setActiveTab(d.action_param);
+        } else if (d.trigger_action === 'open_batch_scheduler') {
+          selectAllClips();
+          if (d.action_param) setScheduleInterval(parseInt(d.action_param));
+          setShowScheduleModal(true);
+        } else if (d.trigger_action === 'run_discovery' && d.query) {
+          setActiveTab('discover');
+          handleRunDiscovery(d.query);
+        } else if (d.quality) {
+          setEditQualityPreset(d.value);
+        } else if (d.subtitle) {
+          setEditSubtitleStyle(d.value);
+        }
+      }
+    } catch (err) {
+      setJarvisMessages(prev => [
+        ...prev,
+        { role: 'jarvis', text: `Comms interface error: ${err.message}`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+      ]);
+    }
+  };
+
+  const toggleJarvisMic = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('Speech recognition is not supported in this browser. Please use Chrome, Edge, or type your message.');
+      return;
+    }
+    if (isJarvisListening) {
+      setIsJarvisListening(false);
+      setJarvisStatus('STANDBY • READY');
+      return;
+    }
+
+    try {
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const rec = new SpeechRec();
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.lang = 'en-US';
+
+      rec.onstart = () => {
+        setIsJarvisListening(true);
+        setJarvisStatus('LISTENING FOR YOUR COMMAND, SIR...');
+      };
+
+      rec.onresult = (e) => {
+        const transcript = e.results[0][0].transcript;
+        setIsJarvisListening(false);
+        setJarvisStatus('PROCESSING...');
+        handleJarvisSend(transcript);
+      };
+
+      rec.onerror = () => {
+        setIsJarvisListening(false);
+        setJarvisStatus('STANDBY • READY');
+      };
+
+      rec.onend = () => {
+        setIsJarvisListening(false);
+        setJarvisStatus('STANDBY • READY');
+      };
+
+      rec.start();
+    } catch (e) {
+      setIsJarvisListening(false);
+      setJarvisStatus('STANDBY • READY');
+    }
+  };
+
+  const executeJarvisDirectAction = async (action, target = null) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/jarvis/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: action, target: target })
+      });
+      const data = await res.json();
+      const reply = data.message || `Executed ${action}, sir.`;
+      setJarvisMessages(prev => [
+        ...prev,
+        { role: 'jarvis', text: reply, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), imgUrl: data.data?.url || null }
+      ]);
+      speakJarvisTTS(reply);
+    } catch (e) {
+      alert(`Action error: ${e.message}`);
+    }
+  };
+
+  const executeJarvisCustomMacro = async (cmdId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/jarvis/commands/${cmdId}/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ analytics: analytics })
+      });
+      const data = await res.json();
+      setJarvisMessages(prev => [
+        ...prev,
+        { role: 'jarvis', text: data.response, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+      ]);
+      speakJarvisTTS(data.response);
+
+      if (data.directive) {
+        const d = data.directive;
+        if (d.trigger_action === 'switch_tab' && d.action_param) setActiveTab(d.action_param);
+        if (d.trigger_action === 'open_batch_scheduler') { selectAllClips(); setShowScheduleModal(true); }
+      }
+    } catch (e) {
+      alert(`Macro execution error: ${e.message}`);
+    }
+  };
+
+  const handleCreateJarvisMacro = async () => {
+    const phrase = prompt("Enter the voice or text trigger phrase you will say (e.g., 'start work', 'cleanup', 'render all'):");
+    if (!phrase) return;
+    const desc = prompt("Describe what this custom routine does:", `Custom macro for ${phrase}`);
+
+    const newCmd = {
+      name: phrase.toUpperCase(),
+      triggers: [phrase.toLowerCase().trim()],
+      description: desc || "Custom user macro",
+      enabled: true,
+      actions: [
+        { type: "speak", message: `Protocol ${phrase} activated, sir.` }
+      ]
+    };
+
+    try {
+      await fetch(`${API_BASE}/api/jarvis/commands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCmd)
+      });
+      fetchJarvisCommands();
+      const confirmReply = `Custom routine '${phrase}' registered in J.A.R.V.I.S. database, sir.`;
+      setJarvisMessages(prev => [
+        ...prev,
+        { role: 'jarvis', text: confirmReply, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+      ]);
+      speakJarvisTTS(confirmReply);
+    } catch (e) {
+      alert(`Failed to create macro: ${e.message}`);
+    }
+  };
+
+  const handleDeleteJarvisMacro = async (cmdId) => {
+    if (!confirm('Are you sure you want to remove this custom macro routine?')) return;
+    try {
+      await fetch(`${API_BASE}/api/jarvis/commands/${cmdId}`, { method: 'DELETE' });
+      fetchJarvisCommands();
+    } catch (e) {
+      alert(`Delete error: ${e.message}`);
+    }
+  };
 
   const fetchDiscoverPresets = async () => {
     try {
@@ -792,6 +1064,20 @@ export default function App() {
           >
             <Youtube size={18} />
             <span>Publish History ({uploads.length})</span>
+          </div>
+
+          <div
+            className={`nav-item ${activeTab === 'jarvis' ? 'active' : ''}`}
+            onClick={() => setActiveTab('jarvis')}
+            style={{
+              background: activeTab === 'jarvis' ? 'rgba(6, 182, 212, 0.16)' : 'transparent',
+              borderColor: activeTab === 'jarvis' ? '#22d3ee' : 'transparent',
+              color: activeTab === 'jarvis' ? '#67e8f9' : 'inherit'
+            }}
+          >
+            <Bot size={18} color="#22d3ee" />
+            <span style={{ fontWeight: 700, letterSpacing: '0.4px' }}>J.A.R.V.I.S. AI</span>
+            <span style={{ marginLeft: 'auto', background: 'rgba(34, 211, 238, 0.2)', color: '#38bdf8', padding: '1px 6px', borderRadius: 10, fontSize: 10, fontWeight: 800 }}>LIVE</span>
           </div>
         </nav>
 
@@ -2011,6 +2297,400 @@ export default function App() {
               )}
             </div>
           )}
+
+          {/* TAB 6: J.A.R.V.I.S. AI CO-PILOT & OS CONTROLLER */}
+          {activeTab === 'jarvis' && (
+            <div>
+              {/* Top HUD Banner */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <h2 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '0.5px', background: 'linear-gradient(135deg, #22d3ee, #38bdf8, #818cf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>
+                      J.A.R.V.I.S. Autonomous AI Controller
+                    </h2>
+                    <span style={{ background: 'rgba(34, 211, 238, 0.15)', border: '1px solid rgba(34, 211, 238, 0.4)', color: '#38bdf8', fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 12 }}>
+                      MARK VII • SYSTEM LINKED
+                    </span>
+                  </div>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 }}>
+                    Intelligent Windows Workstation Commander &amp; ViralCut AI Autonomous Producer
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', background: 'var(--bg-secondary)', padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                    <input
+                      type="checkbox"
+                      checked={jarvisVoiceOutput}
+                      onChange={(e) => setJarvisVoiceOutput(e.target.checked)}
+                      style={{ accentColor: '#22d3ee' }}
+                    />
+                    <span>🔊 J.A.R.V.I.S. Voice Speech (TTS)</span>
+                  </label>
+                  <button className="btn btn-secondary btn-sm" onClick={() => { fetchJarvisVitals(); fetchJarvisCommands(); }}>
+                    <RefreshCw size={14} /> Refresh HUD
+                  </button>
+                </div>
+              </div>
+
+              {/* Grid: Arc Reactor Center & Live Hardware Vitals */}
+              <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 20, marginBottom: 20 }}>
+                {/* Arc Reactor Voice Hub */}
+                <div className="arc-reactor-box">
+                  <div
+                    className={`arc-reactor-core ${isJarvisListening ? 'listening' : (jarvisStatus.includes('TRANSMITTING') ? 'speaking' : '')}`}
+                    onClick={toggleJarvisMic}
+                    title="Click Arc Reactor to Speak"
+                  >
+                    <div className="arc-ring-outer"></div>
+                    <div className="arc-ring-mid"></div>
+                    <div className="arc-center-orb">
+                      {isJarvisListening ? <Mic size={22} color="#fff" /> : 'JARVIS'}
+                    </div>
+                  </div>
+
+                  <div style={{ fontWeight: 800, fontSize: 12, letterSpacing: '1px', color: isJarvisListening ? '#ef4444' : '#22d3ee', textTransform: 'uppercase', marginBottom: 8 }}>
+                    {jarvisStatus}
+                  </div>
+
+                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', marginBottom: 14 }}>
+                    {isJarvisListening ? 'Speak your natural command into your microphone...' : 'Click the Arc Reactor or Mic to activate voice command recognition.'}
+                  </p>
+
+                  {/* Hardware Quick Action Buttons */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, width: '100%' }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => executeJarvisDirectAction('screenshot')}
+                      title="Capture entire workstation screen"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 11 }}
+                    >
+                      <Camera size={13} color="#38bdf8" /> Screen
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => executeJarvisDirectAction('volume_mute')}
+                      title="Toggle system mute"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 11 }}
+                    >
+                      <VolumeX size={13} color="#f87171" /> Mute
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => executeJarvisDirectAction('volume_up')}
+                      title="Increase volume"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 11 }}
+                    >
+                      <Volume2 size={13} color="#34d399" /> Vol +
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => executeJarvisDirectAction('volume_down')}
+                      title="Decrease volume"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 11 }}
+                    >
+                      <Volume2 size={13} color="#fbbf24" /> Vol -
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => executeJarvisDirectAction('minimize_all')}
+                      title="Minimize all windows to desktop"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 11 }}
+                    >
+                      <Monitor size={13} color="#a78bfa" /> Desktop
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => executeJarvisDirectAction('lock')}
+                      title="Lock Windows Workstation"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 11, borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                    >
+                      <Lock size={13} color="#ef4444" /> Lock PC
+                    </button>
+                  </div>
+                </div>
+
+                {/* Real-Time Hardware & Studio Vitals HUD */}
+                <div style={{ background: 'var(--bg-secondary)', border: '1px solid rgba(34, 211, 238, 0.25)', borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.8px', color: '#67e8f9', textTransform: 'uppercase' }}>
+                        ● LIVE HARDWARE TELEMETRY ({jarvisVitals?.os?.platform || 'Windows 64-bit'})
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        Host: {jarvisVitals?.os?.hostname || 'LOCAL-PC'} • Uptime: {jarvisVitals?.os?.uptime_hours || 0}h
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+                      {/* CPU Stat */}
+                      <div style={{ background: 'var(--bg-primary)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#38bdf8', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                          <Cpu size={14} /> CPU Load
+                        </div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: (jarvisVitals?.cpu?.percent || 0) > 85 ? '#ef4444' : '#f8fafc' }}>
+                          {jarvisVitals?.cpu?.percent ?? 0}%
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {jarvisVitals?.cpu?.physical_cores || 4}C / {jarvisVitals?.cpu?.logical_cores || 8}T
+                        </div>
+                      </div>
+
+                      {/* RAM Stat */}
+                      <div style={{ background: 'var(--bg-primary)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#a78bfa', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                          <Activity size={14} /> RAM Usage
+                        </div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: (jarvisVitals?.memory?.percent || 0) > 85 ? '#ef4444' : '#f8fafc' }}>
+                          {jarvisVitals?.memory?.percent ?? 0}%
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {jarvisVitals?.memory?.used_gb ?? 0} / {jarvisVitals?.memory?.total_gb ?? 0} GB
+                        </div>
+                      </div>
+
+                      {/* Primary Disk */}
+                      <div style={{ background: 'var(--bg-primary)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#34d399', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                          <HardDrive size={14} /> Storage (D:)
+                        </div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: '#f8fafc' }}>
+                          {jarvisVitals?.disk?.free_gb ?? 0} GB
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                          Free of {jarvisVitals?.disk?.total_gb ?? 0} GB
+                        </div>
+                      </div>
+
+                      {/* Battery / Power */}
+                      <div style={{ background: 'var(--bg-primary)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#fbbf24', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                          <Zap size={14} /> Power Mode
+                        </div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc' }}>
+                          {jarvisVitals?.battery?.percent !== null && jarvisVitals?.battery?.percent !== undefined ? `${jarvisVitals?.battery?.percent}%` : 'AC Power'}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#34d399', marginTop: 2 }}>
+                          {jarvisVitals?.battery?.plugged ? '⚡ Continuous Power' : '🔋 On Battery'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ViralCut AI Studio Bridge Card */}
+                  <div style={{ background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.12), rgba(59, 130, 246, 0.12))', border: '1px solid rgba(34, 211, 238, 0.3)', borderRadius: 10, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: '#67e8f9', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Bot size={15} /> ViralCut AI Studio Engine Connected
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        Target Channel: <strong>PDX</strong> • 1080p Full HD Engine Active • Dynamic Multi-Shot Smart Crop Enabled
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setActiveTab('editor')}
+                        style={{ fontSize: 11, borderColor: '#38bdf8' }}
+                      >
+                        Shorts Editor ↗
+                      </button>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => { selectAllClips(); setShowScheduleModal(true); }}
+                        style={{ fontSize: 11, background: 'linear-gradient(135deg, #06b6d4, #2563eb)' }}
+                      >
+                        ⚡ Batch Scheduler
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Middle Section: Natural Language & Voice Conversation Stream */}
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 14, padding: 18, marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <MessageSquare size={16} color="#38bdf8" />
+                    <span style={{ fontWeight: 700, fontSize: 14 }}>Live Command Console &amp; Conversational Stream</span>
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    Type or speak naturally — ask J.A.R.V.I.S. to operate ViralCut AI or manage your Windows PC.
+                  </span>
+                </div>
+
+                {/* Message Log */}
+                <div className="jarvis-chat-stream">
+                  {jarvisMessages.map((msg, idx) => (
+                    <div key={idx} className={`jarvis-bubble ${msg.role}`}>
+                      <div className="jarvis-bubble-meta">
+                        {msg.role === 'jarvis' ? '⚡ J.A.R.V.I.S.' : '👤 YOU'} • {msg.time || ''}
+                      </div>
+                      <div style={{ whiteSpace: 'pre-line' }}>{msg.text}</div>
+                      {msg.imgUrl && (
+                        <div style={{ marginTop: 8 }}>
+                          <a href={msg.imgUrl} target="_blank" rel="noreferrer">
+                            <img
+                              src={msg.imgUrl}
+                              alt="Screenshot Preview"
+                              style={{ maxWidth: '100%', maxHeight: 220, borderRadius: 8, border: '1px solid rgba(34, 211, 238, 0.4)' }}
+                            />
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Quick Action Suggestion Chips */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '12px 0' }}>
+                  {[
+                    "Take a screenshot of my screen",
+                    "How do I increase my 40.9% watch rate?",
+                    "Focus Studio: switch to shorts editor",
+                    "Auto-discover GTA 6 viral gameplay videos",
+                    "Launch 1080p batch scheduler",
+                    "Mute system volume",
+                    "What is my CPU and memory usage?"
+                  ].map((chip, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className="btn-chip"
+                      style={{ fontSize: 11, padding: '4px 10px', background: 'rgba(34, 211, 238, 0.08)', borderColor: 'rgba(34, 211, 238, 0.25)', color: '#bae6fd' }}
+                      onClick={() => handleJarvisSend(chip)}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Input Bar */}
+                <form
+                  onSubmit={(e) => { e.preventDefault(); handleJarvisSend(); }}
+                  style={{ display: 'flex', gap: 10, marginTop: 8 }}
+                >
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={toggleJarvisMic}
+                    style={{
+                      background: isJarvisListening ? 'rgba(239, 68, 68, 0.2)' : 'var(--bg-primary)',
+                      borderColor: isJarvisListening ? '#ef4444' : 'var(--border-color)',
+                      color: isJarvisListening ? '#ef4444' : '#38bdf8',
+                      padding: '0 16px'
+                    }}
+                    title={isJarvisListening ? "Listening... click to stop" : "Click to speak"}
+                  >
+                    <Mic size={18} />
+                  </button>
+
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Speak or type a command: 'take a screenshot', 'mute audio', 'open batch scheduler', 'lock PC'..."
+                    value={jarvisInput}
+                    onChange={(e) => setJarvisInput(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={!jarvisInput.trim()}
+                    style={{ background: 'linear-gradient(135deg, #06b6d4, #0284c7)', border: 'none', padding: '0 20px' }}
+                  >
+                    <Send size={16} /> Send
+                  </button>
+                </form>
+              </div>
+
+              {/* Bottom Section: Custom Commands & Multi-Action Routines ("Costume Commands") */}
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 14, padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Zap size={18} color="#eab308" />
+                      <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>
+                        Custom Macro Routines ("Costume Commands")
+                      </h3>
+                      <span style={{ background: 'rgba(234, 179, 8, 0.15)', color: '#fbbf24', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 10 }}>
+                        {jarvisCommands.length} MACROS LOADED
+                      </span>
+                    </div>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 4 }}>
+                      Speak or click custom trigger routines that execute chained multi-step actions across Windows and ViralCut AI.
+                    </p>
+                  </div>
+
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleCreateJarvisMacro}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, borderColor: '#eab308', color: '#fbbf24' }}
+                  >
+                    <Plus size={14} /> + Create New Routine
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14 }}>
+                  {jarvisCommands.map((cmd) => (
+                    <div
+                      key={cmd.id}
+                      style={{
+                        background: 'var(--bg-primary)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: 10,
+                        padding: 14,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                          <span style={{ fontWeight: 800, fontSize: 13, color: '#f0fdf4' }}>{cmd.name}</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#34d399', background: 'rgba(16, 185, 129, 0.15)', padding: '2px 6px', borderRadius: 6 }}>
+                            READY
+                          </span>
+                        </div>
+                        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 10px 0', lineHeight: 1.4 }}>
+                          {cmd.description}
+                        </p>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 12 }}>
+                          {(cmd.triggers || []).map((t, idx) => (
+                            <span key={idx} style={{ fontSize: 10, color: '#93c5fd', background: 'rgba(59, 130, 246, 0.15)', padding: '2px 6px', borderRadius: 4 }}>
+                              "{t}"
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleDeleteJarvisMacro(cmd.id)}
+                          style={{ color: '#f87171', border: 'none', background: 'transparent', padding: 4 }}
+                          title="Delete macro routine"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => executeJarvisCustomMacro(cmd.id)}
+                          style={{ background: 'linear-gradient(135deg, #0ea5e9, #3b82f6)', fontSize: 11, padding: '5px 12px' }}
+                        >
+                          ⚡ Run Routine
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 
@@ -2222,6 +2902,97 @@ export default function App() {
                 <Calendar size={16} />
                 {isBatchPublishing ? 'Uploading & Scheduling...' : `Schedule to PDX Channel (every ${scheduleInterval}m)`}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GLOBAL FLOATING J.A.R.V.I.S. MINI-ORB & SLIDE-OUT DRAWER */}
+      <div
+        className={`jarvis-orb-floating ${isJarvisListening ? 'pulse' : ''}`}
+        onClick={() => setShowJarvisFloating(prev => !prev)}
+        title="Open J.A.R.V.I.S. AI Co-Pilot Drawer"
+      >
+        <Bot size={26} color="#030712" />
+      </div>
+
+      {showJarvisFloating && (
+        <div className="jarvis-drawer-overlay" onClick={() => setShowJarvisFloating(false)}>
+          <div className="jarvis-drawer" onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(34, 211, 238, 0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Bot size={20} color="#22d3ee" />
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 14, color: '#f0fdfa' }}>J.A.R.V.I.S. Mini-HUD</div>
+                  <div style={{ fontSize: 10, color: '#38bdf8' }}>ONLINE • {jarvisStatus}</div>
+                </div>
+              </div>
+              <button
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                onClick={() => setShowJarvisFloating(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Quick Actions in Mini-Drawer */}
+            <div style={{ padding: '12px 16px', background: 'rgba(3, 7, 18, 0.4)', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => executeJarvisDirectAction('screenshot')} style={{ fontSize: 10, padding: '4px 8px' }}>
+                📸 Screen
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => executeJarvisDirectAction('volume_mute')} style={{ fontSize: 10, padding: '4px 8px' }}>
+                🔇 Mute
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => { setActiveTab('editor'); setShowJarvisFloating(false); }} style={{ fontSize: 10, padding: '4px 8px' }}>
+                🎬 Editor
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => { selectAllClips(); setShowScheduleModal(true); setShowJarvisFloating(false); }} style={{ fontSize: 10, padding: '4px 8px' }}>
+                ⚡ Schedule
+              </button>
+            </div>
+
+            {/* Chat Stream in Mini-Drawer */}
+            <div className="jarvis-chat-stream" style={{ margin: '14px 16px', flex: 1, minHeight: 0, maxHeight: 'none' }}>
+              {jarvisMessages.map((msg, idx) => (
+                <div key={idx} className={`jarvis-bubble ${msg.role}`}>
+                  <div className="jarvis-bubble-meta">
+                    {msg.role === 'jarvis' ? '⚡ J.A.R.V.I.S.' : '👤 YOU'} • {msg.time || ''}
+                  </div>
+                  <div style={{ whiteSpace: 'pre-line' }}>{msg.text}</div>
+                  {msg.imgUrl && (
+                    <div style={{ marginTop: 6 }}>
+                      <a href={msg.imgUrl} target="_blank" rel="noreferrer">
+                        <img src={msg.imgUrl} alt="Screenshot" style={{ maxWidth: '100%', maxHeight: 140, borderRadius: 6 }} />
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Input in Mini-Drawer */}
+            <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(34, 211, 238, 0.25)' }}>
+              <form onSubmit={(e) => { e.preventDefault(); handleJarvisSend(); }} style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={toggleJarvisMic}
+                  style={{ color: isJarvisListening ? '#ef4444' : '#38bdf8' }}
+                >
+                  <Mic size={16} />
+                </button>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Ask J.A.R.V.I.S..."
+                  value={jarvisInput}
+                  onChange={(e) => setJarvisInput(e.target.value)}
+                  style={{ fontSize: 12 }}
+                />
+                <button type="submit" className="btn btn-primary btn-sm" disabled={!jarvisInput.trim()}>
+                  <Send size={14} />
+                </button>
+              </form>
             </div>
           </div>
         </div>

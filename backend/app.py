@@ -1,7 +1,7 @@
 import os
 import uuid
 import logging
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -34,6 +34,25 @@ from backend.modules.youtube_upload import get_youtube_uploader
 from backend.modules.youtube_download import is_valid_youtube_url, inspect_youtube_video, download_youtube_video
 from backend.modules.youtube_discovery import DISCOVERY_PRESETS, discover_best_youtube_videos
 from backend.modules.subtitle_generator import get_subtitle_styles_metadata
+from backend.modules.jarvis_engine import (
+    JarvisViralCutEngine,
+    get_system_vitals,
+    load_custom_commands,
+    add_or_update_custom_command,
+    delete_custom_command,
+    execute_custom_command,
+    volume_mute_toggle,
+    volume_up,
+    volume_down,
+    set_volume_level,
+    take_screenshot,
+    lock_workstation,
+    minimize_all_windows,
+    launch_app,
+    terminate_process,
+    web_search,
+    get_live_weather
+)
 from backend.services.processing_service import process_video_pipeline, render_clip_pipeline
 from pydantic import BaseModel, Field
 
@@ -78,6 +97,13 @@ app.add_middleware(
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
 if (FRONTEND_DIST / "assets").exists():
     app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
+
+# Mount Screenshots directory for Jarvis
+JARVIS_SCREENSHOTS = BASE_DIR / "output" / "screenshots"
+JARVIS_SCREENSHOTS.mkdir(parents=True, exist_ok=True)
+app.mount("/screenshots", StaticFiles(directory=str(JARVIS_SCREENSHOTS)), name="screenshots")
+
+jarvis_engine = JarvisViralCutEngine()
 
 @app.get("/")
 def root(request: Request):
@@ -179,6 +205,111 @@ async def discover_youtube_videos_endpoint(req: DiscoverYouTubeRequest):
     except Exception as e:
         logger.exception(f"YouTube discovery failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== J.A.R.V.I.S. AI CO-PILOT ENDPOINTS ====================
+
+class JarvisChatRequest(BaseModel):
+    message: str
+    context: Optional[Dict[str, Any]] = None
+
+class JarvisActionRequest(BaseModel):
+    action: str
+    target: Optional[str] = None
+    level: Optional[int] = None
+    steps: Optional[int] = None
+
+class JarvisCustomCommandModel(BaseModel):
+    id: Optional[str] = None
+    name: str
+    triggers: List[str]
+    description: str = ""
+    enabled: bool = True
+    actions: List[Dict[str, Any]] = Field(default_factory=list)
+
+@app.post("/api/jarvis/chat")
+def handle_jarvis_chat_endpoint(req: JarvisChatRequest):
+    """Processes conversational instructions from user for ViralCut AI and Windows system."""
+    res = jarvis_engine.process_command(req.message, req.context)
+    return res
+
+@app.get("/api/jarvis/vitals")
+def get_jarvis_vitals_endpoint():
+    """Returns live workstation telemetry (CPU, RAM, Disks, Battery, Uptime, Top Processes)."""
+    return get_system_vitals()
+
+@app.post("/api/jarvis/action")
+def execute_jarvis_action_endpoint(req: JarvisActionRequest):
+    """Executes a direct hardware or OS action."""
+    action = req.action.lower().strip()
+    msg = ""
+    data: Dict[str, Any] = {}
+
+    if action == "volume_up":
+        msg = volume_up(req.steps or 5)
+    elif action == "volume_down":
+        msg = volume_down(req.steps or 5)
+    elif action == "volume_mute":
+        msg = volume_mute_toggle()
+    elif action == "volume_set":
+        msg = set_volume_level(req.level or 50)
+    elif action == "screenshot":
+        scr = take_screenshot()
+        msg = scr.get("message", "Screenshot captured.")
+        data = scr
+    elif action == "lock":
+        msg = lock_workstation()
+    elif action == "minimize":
+        msg = minimize_all_windows()
+    elif action == "launch":
+        if not req.target:
+            raise HTTPException(status_code=400, detail="Missing target app.")
+        msg = launch_app(req.target)
+    elif action == "kill":
+        if not req.target:
+            raise HTTPException(status_code=400, detail="Missing target process.")
+        msg = terminate_process(req.target)
+    elif action == "search_google":
+        msg = web_search(req.target or "", engine="google")
+    elif action == "search_youtube":
+        msg = web_search(req.target or "", engine="youtube")
+    elif action == "weather":
+        data = get_live_weather(req.target or "auto")
+        msg = data.get("summary", "Weather unavailable.")
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
+
+    return {"success": True, "action": action, "message": msg, "data": data}
+
+@app.get("/api/jarvis/commands")
+def list_jarvis_commands_endpoint():
+    """Returns all custom commands & macros."""
+    return {"commands": load_custom_commands()}
+
+@app.post("/api/jarvis/commands")
+def save_jarvis_command_endpoint(cmd: JarvisCustomCommandModel):
+    """Creates or updates a custom macro."""
+    saved = add_or_update_custom_command(cmd.model_dump())
+    return {"success": True, "command": saved}
+
+@app.delete("/api/jarvis/commands/{cmd_id}")
+def delete_jarvis_command_endpoint(cmd_id: str):
+    """Deletes a custom macro."""
+    deleted = delete_custom_command(cmd_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Command not found.")
+    return {"success": True, "deleted_id": cmd_id}
+
+@app.post("/api/jarvis/commands/{cmd_id}/execute")
+def execute_jarvis_command_endpoint(cmd_id: str, context: Optional[Dict[str, Any]] = None):
+    """Executes a custom macro immediately."""
+    cmds = load_custom_commands()
+    target = next((c for c in cmds if c.get("id") == cmd_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Command not found.")
+    reply, steps, directive = execute_custom_command(target, context)
+    return {"success": True, "response": reply, "steps": steps, "directive": directive}
+
+# ============================================================================
 
 @app.post("/api/videos/youtube-inspect")
 def inspect_youtube_endpoint(req: YouTubeInspectRequest):

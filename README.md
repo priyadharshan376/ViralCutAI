@@ -1,19 +1,53 @@
-# ViralCut AI
+# ViralCut AI (with J.A.R.V.I.S. Autonomous Studio Controller)
 
-**ViralCut AI** is an intelligent, hardware-conscious video-processing system that automatically identifies viral moments from long-form videos and converts them into short-form vertical videos (9:16) for YouTube Shorts.
+**ViralCut AI** is a complete, intelligent video-processing and studio automation system that identifies viral moments from long-form videos and converts them into 1080p Full HD vertical videos (9:16) for YouTube Shorts.
 
-Tailored specifically for hardware-conscious environments (**HP ProDesk 400 G5 SFF**: Intel Core i3 8th Gen, 8 GB RAM, Intel Integrated Graphics, Windows 11).
+Equipped with **J.A.R.V.I.S.** — an autonomous voice-interactive AI co-pilot that manages Windows workstation hardware (volume, mute, screen captures, workstation lock, desktop minimize), executes multi-step custom macro routines ("Costume Commands"), and directs ViralCut AI's production and publishing pipelines.
 
 ---
 
-## 📌 Complete 4-Phase System Status: ALL PHASES COMPLETED
+## 🌟 Key Capabilities
 
-| Phase | Description | Status |
+### 1. 🤖 J.A.R.V.I.S. Autonomous System & Studio Controller
+- **Natural Voice & Human Conversation**: Hands-free voice speech recognition + speech synthesis (TTS) + live chat console.
+- **Hardware Telemetry & Control**: Real-time CPU, RAM, Disk, and Battery telemetry.
+- **Windows OS Control**: Mute/volume toggle, full-screen capture preview, workstation locking, and desktop minimization.
+- **Custom Macro Routines ("Costume Commands")**: Voice and one-click triggers for chained actions (e.g., Focus Studio Mode, 1080p Production Mode, Auto-Pilot Batch Schedule, Security Lockdown).
+- **Global Floating HUD**: Persistent Arc Reactor mini-orb and slide-out quick drawer accessible anywhere across tabs.
+- **Algorithm Advice**: J.A.R.V.I.S. provides tactical guidance on turning a 40.9% "Stayed to Watch" rate into 65%+ viral reach (hook banners, word pops, fast pacing).
+
+### 2. 🎬 1080p Full HD Video Production & Dynamic Multi-Shot Smart Crop
+- **1080p Ultra Crisp Output**: Renders at true $1080\times1920$ resolution using multi-pass high-bitrate Lanczos scaling.
+- **Dynamic Multi-Shot Smart Crop**: Multi-shot scene change detection with continuous face tracking that dynamically reframes speakers and slides when camera angles cut.
+- **2.8s Opening Hook Banner**: High-contrast top-third headline banner that stops users from swiping in the first 3 seconds.
+- **7 Popular Creator Subtitle Styles**: Hormozi Bold, MrBeast Pop, TikTok Pill Box, Neon Cyber Cyan, Creator Minimal, Cinema Yellow, and Red Alert Hook.
+
+### 3. 🔍 YouTube Best Video Discovery Algorithm
+Auto-discovers high-retention long-form videos across 7 proven viral niches:
+1. 💰 Motivation & Millionaire Mindset
+2. 🎙️ Podcast Clips & Interviews
+3. 💎 Luxury & Rich Lifestyle
+4. 🕵️ Mystery & True Crime
+5. 🤖 AI & Future Technology
+6. 🧠 Psychology & Human Behaviour
+7. 🎮 GTA 6 & Gaming Hype
+
+### 4. 📅 Automated YouTube Batch Scheduler (PDX Channel)
+- One-click multi-clip selection.
+- Automatic staggered release schedule (every 15, 20, 30, 45, or 60 minutes).
+- Visual timeline preview of scheduled releases.
+- Auto-rerender in 1080p HD before upload.
+
+---
+
+## 📌 Complete System Architecture
+
+| Component | Description | Status |
 |---|---|---|
-| **Phase 1** | **Video Processing Foundation**: Video upload, metadata extraction, 16kHz mono audio extraction, Faster-Whisper CPU INT8 transcription with word timestamps, SQLite database. | ✅ Verified & Tested |
-| **Phase 2** | **AI Viral Clip Detection**: Semantic sentence-aware segmentation, 6-dimension weighted viral scoring (Hook 25%, Emotion 20%, Info 15%, Story 15%, Context 15%, Engagement 10%), IoU overlap suppression, candidate ranking. | ✅ Verified & Tested |
-| **Phase 3** | **Automatic Shorts Generation**: Face-tracked / centered vertical 9:16 framing ($720\times1280$), EBU R128 audio normalization, burned-in yellow styled subtitles (ASS), YouTube Shorts metadata generator. | ✅ Verified & Tested |
-| **Phase 4** | **Full-Stack Application & YouTube Integration**: Interactive React dashboard, real-time analytics, HTML5 vertical video player, metadata editor, YouTube Data API v3 publishing & OAuth sync. | ✅ Verified & Tested |
+| **J.A.R.V.I.S. Controller** | OS hardware telemetry, volume/media, screenshots, custom macro routines, natural voice & chat | ✅ Verified & Tested |
+| **YouTube Discovery Engine** | 7 viral niches, high-retention filtering, auto-import to clipping pipeline | ✅ Verified & Tested |
+| **1080p Rendering Engine** | Dynamic Smart Crop, Opening Hook Banner, 7 subtitle styles, 1080x1920 Lanczos | ✅ Verified & Tested |
+| **Batch Scheduler** | Automated staggered publishing to YouTube channel **PDX** | ✅ Verified & Tested |
 
 ---
 

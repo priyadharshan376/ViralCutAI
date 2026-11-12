@@ -1,0 +1,101 @@
+[
+  {
+    "id": "cmd_production_mode",
+    "name": "🎬 1080p Production Mode",
+    "triggers": [
+      "production mode",
+      "prepare shorts",
+      "set 1080p",
+      "best quality"
+    ],
+    "description": "Sets Full HD 1080p, Hormozi Bold subtitles, and optimal mobile framing",
+    "enabled": true,
+    "actions": [
+      { "type": "app_setting", "key": "quality", "value": "high" },
+      { "type": "app_setting", "key": "subtitle", "value": "hormozi" },
+      { "type": "speak", "message": "Production mode activated, sir. Configured for 1080p Full HD with Hormozi Bold subtitles." }
+    ]
+  },
+  {
+    "id": "cmd_autopilot_schedule",
+    "name": "📅 Batch Auto-Pilot (30m Interval)",
+    "triggers": [
+      "autopilot schedule",
+      "auto schedule all",
+      "schedule all clips",
+      "batch schedule"
+    ],
+    "description": "Selects all pending clips and opens batch scheduler with 30-minute intervals",
+    "enabled": true,
+    "actions": [
+      { "type": "app_action", "action": "open_batch_scheduler", "interval": 30 },
+      { "type": "speak", "message": "Opening batch scheduler with 30-minute staggered intervals for all clips, sir." }
+    ]
+  },
+  {
+    "id": "cmd_focus_studio",
+    "name": "🎯 Focus Studio Protocol",
+    "triggers": [
+      "focus studio",
+      "focus mode",
+      "deep work",
+      "silence distractions"
+    ],
+    "description": "Lowers volume to 25%, silences notifications, and focuses the Shorts Editor",
+    "enabled": true,
+    "actions": [
+      { "type": "system_volume", "action": "set", "level": 25 },
+      { "type": "app_action", "action": "switch_tab", "tab": "editor" },
+      { "type": "speak", "message": "Studio focus mode engaged. Audio lowered and editor brought to center stage, sir." }
+    ]
+  },
+  {
+    "id": "cmd_morning_briefing",
+    "name": "☀️ Studio & Channel Briefing",
+    "triggers": [
+      "studio briefing",
+      "morning briefing",
+      "status report",
+      "how is the channel"
+    ],
+    "description": "Jarvis delivers a full spoken status report on channel uploads, clips, and PC vitals",
+    "enabled": true,
+    "actions": [
+      { "type": "special", "action": "channel_briefing" }
+    ]
+  },
+  {
+    "id": "cmd_lockdown",
+    "name": "🔒 Security Lockdown",
+    "triggers": [
+      "lock down",
+      "lock computer",
+      "lock pc now",
+      "secure workstation"
+    ],
+    "description": "Mutes system audio and immediately locks the Windows workstation",
+    "enabled": true,
+    "actions": [
+      { "type": "system_volume", "action": "mute" },
+      { "type": "system_lock", "action": "lock" },
+      { "type": "speak", "message": "Workstation secured and locked, sir." }
+    ]
+  },
+  {
+    "id": "cmd_chill_break",
+    "name": "☕ Creator Chill Break",
+    "triggers": [
+      "chill mode",
+      "take a break",
+      "relax mode",
+      "play some lofi"
+    ],
+    "description": "Sets volume to 40% and launches relaxing Lofi Girl live stream on YouTube",
+    "enabled": true,
+    "actions": [
+      { "type": "system_volume", "action": "set", "level": 40 },
+      { "type": "system_url", "target": "https://www.youtube.com/watch?v=jfKfPfyJRdk" },
+      { "type": "speak", "message": "Relaxation protocol active, sir. Playing relaxing lofi streams while your renders finish." }
+    ]
+  }
+]
